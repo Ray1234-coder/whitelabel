@@ -1,10 +1,9 @@
 # Agent37 White-Label Template
 
-A white-label, multi-tenant dashboard for managing AI agents on the
-[Agent37](https://www.agent37.com) B2B Agents API. Fork it, rebrand it, ship it.
+A white-label, multi-tenant dashboard for managing Hermes/Openclaw agents on the [Agent37](https://www.agent37.com) Cloud API. Fork it and rebrand it
 
 <p align="center">
-  <img src="screenshots/login.png" alt="Magic-link sign in (rebranded via env)" width="60%" />
+  <img src="screenshots/overview.png" alt="The white-label dashboard (agents, team, sign-in) plus each agent's own UIs (Hermes chat, Minions tasks, file browser)" width="100%" />
 </p>
 
 ## Setup
