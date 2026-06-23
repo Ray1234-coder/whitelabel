@@ -1,6 +1,6 @@
 import { requireAdmin, requireMember, requireUser } from "@/lib/auth";
-import { ApiError, handleError, json } from "@/lib/http";
-import type { Invitation, WorkspaceMember } from "@/lib/types";
+import { ApiError, handleError, json, readJson } from "@/lib/http";
+import type { Invitation, Role, WorkspaceMember } from "@/lib/types";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -34,10 +34,14 @@ export async function POST(request: Request, { params }: Ctx) {
     const { id } = await params;
     const { supabase, user } = await requireUser();
     await requireAdmin(supabase, id, user.id);
+    const { role = "customer" } = await readJson<{ role?: Role }>(request);
+    if (!["admin", "customer"].includes(role)) {
+      throw new ApiError(400, "invalid_request", "Invalid role");
+    }
 
     const { data, error } = await supabase
       .from("invitations")
-      .insert({ workspace_id: id, role: "admin", created_by: user.id })
+      .insert({ workspace_id: id, role, created_by: user.id })
       .select("token")
       .single();
     if (error) throw new ApiError(500, "db_error", error.message);

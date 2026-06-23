@@ -29,6 +29,7 @@ export function MembersView() {
   const [role, setRole] = useState<Role>("admin");
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteRole, setInviteRole] = useState<Role>("customer");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -64,6 +65,7 @@ export function MembersView() {
     try {
       const { url } = await apiFetch<{ url: string }>(`/api/workspaces/${current.id}/members`, {
         method: "POST",
+        body: JSON.stringify({ role: inviteRole }),
       });
       await navigator.clipboard.writeText(url).catch(() => {});
       toast.success("Invite link created and copied");
@@ -119,9 +121,39 @@ export function MembersView() {
                 <DialogTitle>Invite member</DialogTitle>
                 <DialogDescription>
                   Create an invite link and share it. Anyone who opens it joins this workspace as an
-                  admin.
+                  {inviteRole === "admin" ? " admin." : " customer."}
                 </DialogDescription>
               </DialogHeader>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                    inviteRole === "customer"
+                      ? "border-primary bg-muted"
+                      : "border-input hover:bg-muted/60"
+                  }`}
+                  onClick={() => setInviteRole("customer")}
+                >
+                  <span className="block font-medium">Customer</span>
+                  <span className="mt-1 block text-muted-foreground">
+                    Can access assigned agents, but cannot manage members or create agents.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                    inviteRole === "admin"
+                      ? "border-primary bg-muted"
+                      : "border-input hover:bg-muted/60"
+                  }`}
+                  onClick={() => setInviteRole("admin")}
+                >
+                  <span className="block font-medium">Admin</span>
+                  <span className="mt-1 block text-muted-foreground">
+                    Can manage agents, members, invitations, and workspace settings.
+                  </span>
+                </button>
+              </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setInviteOpen(false)} disabled={busy}>
                   Cancel
@@ -154,7 +186,9 @@ export function MembersView() {
                   <tr key={m.user_id} className="border-t">
                     <td className="px-4 py-3 font-medium">{m.email}</td>
                     <td className="px-4 py-3">
-                      <Badge>Admin</Badge>
+                      <Badge variant={m.role === "admin" ? "default" : "secondary"}>
+                        {m.role === "admin" ? "Admin" : "Customer"}
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{formatDate(m.created_at)}</td>
                     <td className="px-4 py-3 text-right">
@@ -192,6 +226,9 @@ export function MembersView() {
                       <tr key={inv.token} className="border-t">
                         <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                           …/invite/{inv.token.slice(0, 8)}
+                          <Badge className="ml-2" variant={inv.role === "admin" ? "default" : "secondary"}>
+                            {inv.role === "admin" ? "Admin" : "Customer"}
+                          </Badge>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">{formatDate(inv.created_at)}</td>
                         <td className="px-4 py-3 text-right">

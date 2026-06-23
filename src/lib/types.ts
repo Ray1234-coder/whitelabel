@@ -1,4 +1,4 @@
-export type Role = "admin";
+export type Role = "admin" | "customer";
 
 export interface Workspace {
   id: string;
