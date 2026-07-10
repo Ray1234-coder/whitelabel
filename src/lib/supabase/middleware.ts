@@ -34,7 +34,10 @@ export async function updateSession(request: NextRequest) {
     pathname === "/" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
-    pathname.startsWith("/invite");
+    pathname.startsWith("/invite") ||
+    // Stripe webhooks arrive with no session cookie and must not be redirected;
+    // the route verifies the Stripe signature itself.
+    pathname.startsWith("/api/stripe");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
