@@ -23,6 +23,9 @@ export async function POST(request: Request, { params }: Ctx) {
       body: JSON.stringify({
         input: trimmed,
         ...(session_id ? { session_id } : {}),
+        // Apply the admin-chosen model, if any, as a per-turn override.
+        ...(row.model ? { model: row.model } : {}),
+        ...(row.provider ? { provider: row.provider } : {}),
         stream: true,
       }),
     });

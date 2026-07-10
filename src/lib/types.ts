@@ -42,6 +42,8 @@ export interface AgentRow {
   cpu: number | null;
   memory: number | null;
   disk: number | null;
+  model: string | null;
+  provider: string | null;
   created_by: string | null;
   created_at: string;
 }

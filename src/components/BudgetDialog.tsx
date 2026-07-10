@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { usd } from "@/lib/format";
 import { monthlyComputeUsd } from "@/config/agents";
-import type { Budget, MergedAgent, ModelsResponse, Usage } from "@/lib/types";
+import type { Budget, MergedAgent, ModelsResponse, Role, Usage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,15 +21,21 @@ export function BudgetDialog({
   open,
   onOpenChange,
   agent,
+  role,
+  onChanged,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   agent: MergedAgent;
+  role?: Role;
+  onChanged?: () => void;
 }) {
   const [budget, setBudget] = useState<Budget | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [models, setModels] = useState<ModelsResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>(agent.model ?? "");
+  const [savingModel, setSavingModel] = useState(false);
 
   const cpu = agent.cpu ?? 0;
   const memory = agent.memory ?? 0;
@@ -51,16 +57,43 @@ export function BudgetDialog({
       })
       .catch((e) => toast.error((e as Error).message))
       .finally(() => setLoading(false));
+    setSelectedModel(agent.model ?? "");
     // Models only resolve while the agent is awake — best-effort, no error toast.
     apiFetch<ModelsResponse>(`/api/agents/${agent.agent37_id}/models`)
       .then(setModels)
       .catch(() => setModels(null));
-  }, [open, agent.agent37_id]);
+  }, [open, agent.agent37_id, agent.model]);
 
-  const modelLabel =
-    models?.data?.find((m) => m.is_default)?.label ||
+  const isAdmin = role === "admin";
+  const defaultModel = models?.data?.find((m) => m.is_default);
+  // What the agent will actually use: the admin's stored choice, else the default.
+  const effectiveId = agent.model || defaultModel?.id || "";
+  const effectiveLabel =
+    models?.data?.find((m) => m.id === effectiveId)?.label ||
+    agent.model ||
     models?.default_model ||
     (running ? "Loading…" : "Available when the agent is running");
+
+  async function changeModel(modelId: string) {
+    setSavingModel(true);
+    setSelectedModel(modelId);
+    try {
+      const picked = models?.data?.find((m) => m.id === modelId);
+      await apiFetch(`/api/agents/${agent.agent37_id}/model`, {
+        method: "POST",
+        body: JSON.stringify(
+          modelId ? { model: modelId, provider: picked?.owned_by ?? null } : { model: null }
+        ),
+      });
+      toast.success(modelId ? `Model set to ${picked?.label || modelId}` : "Model reset to default");
+      onChanged?.();
+    } catch (e) {
+      toast.error((e as Error).message);
+      setSelectedModel(agent.model ?? "");
+    } finally {
+      setSavingModel(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,8 +112,32 @@ export function BudgetDialog({
             {/* Model + size */}
             <div className="space-y-2 rounded-md border p-3 text-sm">
               <Line label="Model">
-                <span className="font-medium">{modelLabel}</span>
+                {isAdmin && models?.data?.length ? (
+                  <select
+                    value={selectedModel}
+                    disabled={savingModel}
+                    onChange={(e) => changeModel(e.target.value)}
+                    className="max-w-[13rem] rounded-md border bg-background px-2 py-1 text-sm font-medium focus:border-ring focus:outline-none disabled:opacity-60"
+                  >
+                    <option value="">
+                      Default{defaultModel?.label ? ` (${defaultModel.label})` : ""}
+                    </option>
+                    {models.data.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label || m.id}
+                        {m.owned_by ? ` · ${m.owned_by}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="font-medium">{effectiveLabel}</span>
+                )}
               </Line>
+              {isAdmin && !models?.data?.length && (
+                <p className="text-xs text-muted-foreground">
+                  Start the agent to change its model.
+                </p>
+              )}
               <Line label="Type">
                 <span className="capitalize">{(agent.template ?? "").replace("agent37-", "") || "—"}</span>
               </Line>

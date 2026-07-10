@@ -262,7 +262,7 @@ export function AgentActionsMenu({
       </div>
       </TooltipProvider>
 
-      <BudgetDialog open={budgeting} onOpenChange={setBudgeting} agent={agent} />
+      <BudgetDialog open={budgeting} onOpenChange={setBudgeting} agent={agent} role={role} onChanged={onChanged} />
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}

@@ -97,7 +97,10 @@ export function AgentsView() {
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{a.template ?? "-"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    <div>{a.template ?? "-"}</div>
+                    <div className="text-xs">{a.model || "Default model"}</div>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {a.cpu} vCPU · {a.memory} GB · {a.disk} GB
                   </td>
