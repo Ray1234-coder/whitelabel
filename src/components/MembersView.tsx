@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Trash2, UserPlus } from "lucide-react";
+import { Copy, LifeBuoy, Phone, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch } from "@/lib/api";
+import { branding, support } from "@/config/branding";
+import { cn } from "@/lib/utils";
 import type { DirectoryUser, Invitation, Role, WorkspaceMember } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,16 +35,23 @@ export function MembersView() {
   const [inviteRole, setInviteRole] = useState<Role>("customer");
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [supportAccess, setSupportAccess] = useState(false);
+  const [savingAccess, setSavingAccess] = useState(false);
 
   const load = useCallback(async () => {
     if (!current) return;
     try {
-      const data = await apiFetch<{ members: WorkspaceMember[]; invitations: Invitation[]; role: Role }>(
-        `/api/workspaces/${current.id}/members`
-      );
+      const data = await apiFetch<{
+        members: WorkspaceMember[];
+        invitations: Invitation[];
+        role: Role;
+        support_access: boolean;
+      }>(`/api/workspaces/${current.id}/members`);
       setMembers(data.members);
       setInvitations(data.invitations);
       setRole(data.role);
+      setSupportAccess(data.support_access);
       if (data.role === "admin") {
         try {
           const dir = await apiFetch<{ users: DirectoryUser[] }>("/api/users");
@@ -126,6 +135,26 @@ export function MembersView() {
     }
   }
 
+  async function toggleSupportAccess(next: boolean) {
+    if (!current) return;
+    setSavingAccess(true);
+    // Optimistic — revert on failure.
+    setSupportAccess(next);
+    try {
+      await apiFetch(`/api/workspaces/${current.id}/support-access`, {
+        method: "POST",
+        body: JSON.stringify({ enabled: next }),
+      });
+      toast.success(next ? "Support access granted" : "Support access turned off");
+      load();
+    } catch (e) {
+      setSupportAccess(!next);
+      toast.error((e as Error).message);
+    } finally {
+      setSavingAccess(false);
+    }
+  }
+
   if (!current) return <p className="text-sm text-muted-foreground">No workspace selected.</p>;
 
   return (
@@ -135,6 +164,70 @@ export function MembersView() {
           <h1 className="text-2xl font-semibold tracking-tight">Members</h1>
           <p className="text-sm text-muted-foreground">{current.name}</p>
         </div>
+        <div className="flex items-center gap-2">
+        <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline">
+              <LifeBuoy className="h-4 w-4" />
+              Get help
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Get help</DialogTitle>
+              <DialogDescription>
+                Stuck or want a hand setting something up? Reach {branding.appName} support any time.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <a
+                href={`tel:${support.phoneDigits}`}
+                className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3 text-sm transition-colors hover:bg-accent/60"
+              >
+                <Phone className="h-4 w-4 text-primary" />
+                <span>
+                  <span className="block text-xs text-muted-foreground">Call or text us</span>
+                  <span className="font-medium">{support.phoneDisplay}</span>
+                </span>
+              </a>
+
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Let {branding.appName} support into this workspace</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Off by default. Your data stays private — we can only see your workspace while
+                      this is on. Turn it off any time and we lose access.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={supportAccess}
+                    disabled={!isAdmin || savingAccess}
+                    onClick={() => toggleSupportAccess(!supportAccess)}
+                    className={cn(
+                      "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+                      supportAccess ? "bg-primary" : "bg-input"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-5 w-5 transform rounded-full bg-background shadow transition-transform",
+                        supportAccess ? "translate-x-5" : "translate-x-0.5"
+                      )}
+                    />
+                  </button>
+                </div>
+                <p className="mt-2 text-xs font-medium text-muted-foreground">
+                  {supportAccess ? "Support currently has access." : "Support does not have access."}
+                  {!isAdmin && " Only a workspace admin can change this."}
+                </p>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -194,6 +287,7 @@ export function MembersView() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {loading ? (

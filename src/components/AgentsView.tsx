@@ -58,7 +58,7 @@ export function AgentsView() {
         ) : (
           // Customers add agents through paid checkout (Billing); the agent
           // appears here once payment completes and the webhook provisions it.
-          <CustomerAddAgentButton workspaceId={current.id} />
+          <CustomerAddAgentButton workspaceId={current.id} onCreated={load} />
         )}
       </div>
 
@@ -105,7 +105,10 @@ export function AgentsView() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    <div>{a.template ?? "-"}</div>
+                    <div className="flex items-center gap-2">
+                      <span>{a.template ?? "-"}</span>
+                      {a.plan === "free" && <Badge variant="secondary">Free trial</Badge>}
+                    </div>
                     <div className="text-xs">{a.model || "Default model"}</div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">

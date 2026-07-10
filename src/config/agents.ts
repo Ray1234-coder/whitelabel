@@ -45,6 +45,19 @@ export const DEFAULT_AGENT = {
   monthlyCapUsd: 5,
 } as const;
 
+// Free trial: one limited agent per workspace, no payment. Small box, small AI
+// budget, and capped runs per day so a business can build and test a workflow
+// before paying. FREE_RUNS_PER_DAY is mirrored in the SQL consume_free_run()
+// limit — keep the two in sync.
+export const FREE_AGENT = {
+  template: "agent37-hermes",
+  cpu: 2,
+  memory: 4,
+  disk: 6,
+  monthlyCapUsd: 2,
+} as const;
+export const FREE_RUNS_PER_DAY = 2;
+
 export interface AgentTypeOption {
   id: string;
   template: string;

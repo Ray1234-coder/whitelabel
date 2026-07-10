@@ -22,7 +22,18 @@ export async function GET(_request: Request, { params }: Ctx) {
       .order("created_at", { ascending: false });
     const invitations = (inv as Invitation[]) ?? [];
 
-    return json({ members: (members as WorkspaceMember[]) ?? [], invitations, role });
+    const { data: ws } = await supabase
+      .from("workspaces")
+      .select("support_access")
+      .eq("id", id)
+      .maybeSingle();
+
+    return json({
+      members: (members as WorkspaceMember[]) ?? [],
+      invitations,
+      role,
+      support_access: ws?.support_access ?? false,
+    });
   } catch (e) {
     return handleError(e);
   }

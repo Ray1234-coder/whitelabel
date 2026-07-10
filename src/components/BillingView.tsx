@@ -92,7 +92,7 @@ export function BillingView() {
           <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
           <p className="text-sm text-muted-foreground">{current.name}</p>
         </div>
-        {data?.configured && <CustomerAddAgentButton workspaceId={current.id} />}
+        <CustomerAddAgentButton workspaceId={current.id} onCreated={load} />
       </div>
 
       {loading ? (

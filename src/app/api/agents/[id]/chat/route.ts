@@ -24,6 +24,23 @@ export async function POST(request: Request, { params }: Ctx) {
     const trimmed = (input || "").trim();
     if (!trimmed) throw new ApiError(400, "invalid_request", "input is required");
 
+    // Free-trial agents can only run a couple of times a day. consume_free_run is
+    // a no-op (returns true) for paid/admin agents; for free agents it checks and
+    // records today's usage atomically.
+    if (row.plan === "free") {
+      const { data: allowed, error: runErr } = await supabase.rpc("consume_free_run", {
+        p_agent37_id: id,
+      });
+      if (runErr) throw new ApiError(500, "db_error", runErr.message);
+      if (allowed === false) {
+        throw new ApiError(
+          429,
+          "free_limit_reached",
+          "You've used today's free runs for this trial agent. It resets tomorrow — or upgrade in Billing for unlimited runs."
+        );
+      }
+    }
+
     // Attachments the browser already uploaded via the files route — pass their
     // workspace paths through; the agent reads them from disk alongside the text.
     const attachments = Array.isArray(files) ? files.filter((f) => typeof f === "string" && f) : [];

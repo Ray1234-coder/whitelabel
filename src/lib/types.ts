@@ -46,6 +46,9 @@ export interface AgentRow {
   provider: string | null;
   created_by: string | null;
   created_at: string;
+  plan: string | null;
+  free_runs_date: string | null;
+  free_runs_used: number | null;
 }
 
 export interface Agent {
