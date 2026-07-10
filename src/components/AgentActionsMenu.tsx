@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   ArrowDownToLine,
   FolderOpen,
   Gauge,
   LayoutDashboard,
+  MessageSquare,
   MoreHorizontal,
   Play,
   RotateCw,
@@ -91,6 +93,35 @@ export function AgentActionsMenu({
     <>
       <TooltipProvider delayDuration={200}>
       <div className="flex items-center justify-center gap-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {running ? (
+              <Button
+                asChild
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                aria-label="Chat with this agent"
+              >
+                <Link href={`/dashboard/agents/${agent.agent37_id}/chat`}>
+                  <MessageSquare className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                disabled
+                aria-label="Chat with this agent"
+              >
+                <MessageSquare className="h-4 w-4" />
+              </Button>
+            )}
+          </TooltipTrigger>
+          <TooltipContent>Chat with this agent</TooltipContent>
+        </Tooltip>
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

@@ -1,4 +1,4 @@
-# Agent37 White-Label Template
+# Workify — AI agents that run your work
 
 A white-label, multi-tenant dashboard for managing Hermes/Openclaw agents on the [Agent37](https://www.agent37.com) Cloud API. Fork it and rebrand it
 

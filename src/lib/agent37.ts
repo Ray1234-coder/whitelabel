@@ -68,6 +68,32 @@ export interface ResizeInput {
   disk?: number;
 }
 
+// Data plane: each instance's own gateway at https://{instanceId}.agent37.app/v1.
+// Same server-side key as the control plane; responses may be SSE streams, so this
+// returns the raw Response for the caller (BFF route) to pass through or parse.
+export async function dataPlaneFetch(
+  instanceId: string,
+  path: string,
+  init?: RequestInit
+): Promise<Response> {
+  const key = process.env.AGENT37_API_KEY;
+  if (!key) {
+    throw new Agent37Error(500, "config_error", "AGENT37_API_KEY is not set on the server");
+  }
+  if (!/^[a-z0-9-]+$/i.test(instanceId)) {
+    throw new Agent37Error(400, "invalid_request", "Invalid instance id");
+  }
+  return fetch(`https://${instanceId}.agent37.app/v1${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+    cache: "no-store",
+  });
+}
+
 export const agent37 = {
   listAgents: () => call<{ data: Agent[] }>("/instances"),
   getAgent: (id: string) => call<Agent>(`/instances/${id}`),

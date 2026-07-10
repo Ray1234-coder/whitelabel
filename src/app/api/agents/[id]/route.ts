@@ -1,8 +1,20 @@
 import { agent37 } from "@/lib/agent37";
-import { getAgentRow, requireAdmin, requireUser } from "@/lib/auth";
+import { getAgentRow, requireAdmin, requireMember, requireUser } from "@/lib/auth";
 import { ApiError, handleError, json, readJson } from "@/lib/http";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+export async function GET(_request: Request, { params }: Ctx) {
+  try {
+    const { id } = await params;
+    const { supabase, user } = await requireUser();
+    const row = await getAgentRow(supabase, id);
+    const role = await requireMember(supabase, row.workspace_id, user.id);
+    return json({ agent: row, role });
+  } catch (e) {
+    return handleError(e);
+  }
+}
 
 export async function PATCH(request: Request, { params }: Ctx) {
   try {
