@@ -1,16 +1,25 @@
 export interface Shape {
+  id: string;
   label: string;
   cpu: number;
   memory: number;
-  diskMin: number;
-  diskMax: number;
+  disk: number;
+  blurb: string;
 }
 
+// Per-month compute rates (Agent37 billing). Metered per minute against the wallet.
+export const COMPUTE_RATES = { cpu: 0.8, memory: 0.7, disk: 0.09 } as const;
+
+export function monthlyComputeUsd(cpu: number, memory: number, disk: number): number {
+  return cpu * COMPUTE_RATES.cpu + memory * COMPUTE_RATES.memory + disk * COMPUTE_RATES.disk;
+}
+
+// Selectable sizes at create time. Disk is the shape's default (range minimum).
+// The 1 vCPU size needs a dedicated template, so it is not offered here.
 export const SHAPE_PRESETS: Shape[] = [
-  { label: "Small · 1 vCPU / 3 GB", cpu: 1, memory: 3, diskMin: 6, diskMax: 20 },
-  { label: "Standard · 2 vCPU / 4 GB", cpu: 2, memory: 4, diskMin: 6, diskMax: 20 },
-  { label: "Pro · 4 vCPU / 8 GB", cpu: 4, memory: 8, diskMin: 20, diskMax: 40 },
-  { label: "Max · 8 vCPU / 16 GB", cpu: 8, memory: 16, diskMin: 40, diskMax: 80 },
+  { id: "standard", label: "Standard", cpu: 2, memory: 4, disk: 6, blurb: "Everyday chat, email, docs" },
+  { id: "pro", label: "Pro", cpu: 4, memory: 8, disk: 20, blurb: "Heavier browsing, code, data" },
+  { id: "max", label: "Max", cpu: 8, memory: 16, disk: 40, blurb: "Large jobs, many tools at once" },
 ];
 
 export const DEFAULT_AGENT = {

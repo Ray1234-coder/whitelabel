@@ -67,6 +67,20 @@ export interface Agent {
   created: number | null;
 }
 
+export interface ModelInfo {
+  id: string;
+  label?: string;
+  owned_by?: string;
+  is_default?: boolean;
+}
+
+export interface ModelsResponse {
+  agent?: string;
+  default_model?: string;
+  default_provider?: string;
+  data?: ModelInfo[];
+}
+
 export interface Template {
   name: string;
   scope: "system" | "workspace";

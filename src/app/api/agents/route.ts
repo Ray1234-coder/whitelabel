@@ -1,6 +1,6 @@
 import { agent37 } from "@/lib/agent37";
 import { requireAdmin, requireMember, requireUser } from "@/lib/auth";
-import { AGENT_TEMPLATES, DEFAULT_AGENT } from "@/config/agents";
+import { AGENT_TEMPLATES, DEFAULT_AGENT, SHAPE_PRESETS } from "@/config/agents";
 import { usdToMicros } from "@/lib/format";
 import { ApiError, handleError, json, readJson } from "@/lib/http";
 import type { Agent, AgentRow, MergedAgent } from "@/lib/types";
@@ -75,8 +75,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { supabase, user } = await requireUser();
-    // Shape is fixed server-side (DEFAULT_AGENT); the client picks the workspace and the agent type.
-    const body = await readJson<{ workspace_id?: string; template?: string }>(request);
+    // Admin picks the workspace, agent type, size (shape) and monthly LLM budget.
+    const body = await readJson<{
+      workspace_id?: string;
+      template?: string;
+      shape?: string;
+      monthly_cap_usd?: number;
+    }>(request);
 
     const workspaceId = body.workspace_id;
     if (!workspaceId) throw new ApiError(400, "invalid_request", "workspace_id is required");
@@ -87,16 +92,20 @@ export async function POST(request: Request) {
         ? body.template
         : await resolveTemplate();
 
+    const shape = SHAPE_PRESETS.find((s) => s.id === body.shape) ?? SHAPE_PRESETS[0];
+
+    // Clamp the managed-spend cap to a sane range; default to the template default.
+    const capUsd =
+      typeof body.monthly_cap_usd === "number" && body.monthly_cap_usd >= 0
+        ? Math.min(body.monthly_cap_usd, 1000)
+        : DEFAULT_AGENT.monthlyCapUsd;
+
     const agent = await agent37.createAgent({
       template,
-      resources: {
-        cpu: DEFAULT_AGENT.cpu,
-        memory: DEFAULT_AGENT.memory,
-        disk: DEFAULT_AGENT.disk,
-      },
+      resources: { cpu: shape.cpu, memory: shape.memory, disk: shape.disk },
       user: user.id,
       metadata: { app_workspace: workspaceId },
-      budget: { monthly_cap_micros: usdToMicros(DEFAULT_AGENT.monthlyCapUsd) },
+      budget: { monthly_cap_micros: usdToMicros(capUsd) },
     });
 
     const { error } = await supabase.from("agents").insert({
