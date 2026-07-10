@@ -18,6 +18,13 @@ export interface WorkspaceMember {
   created_at: string;
 }
 
+export interface DirectoryUser {
+  user_id: string;
+  email: string;
+  created_at: string;
+  workspace_count: number;
+}
+
 export interface Invitation {
   token: string;
   workspace_id: string;

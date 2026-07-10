@@ -34,9 +34,26 @@ export async function POST(request: Request, { params }: Ctx) {
     const { id } = await params;
     const { supabase, user } = await requireUser();
     await requireAdmin(supabase, id, user.id);
-    const { role = "customer" } = await readJson<{ role?: Role }>(request);
+    const { role = "customer", user_id } = await readJson<{ role?: Role; user_id?: string }>(
+      request
+    );
     if (!["admin", "customer"].includes(role)) {
       throw new ApiError(400, "invalid_request", "Invalid role");
+    }
+
+    // With a user_id, add that signed-up account to the workspace directly
+    // (no invite link) — RLS allows the insert because the caller is an admin.
+    if (user_id) {
+      const { error } = await supabase
+        .from("memberships")
+        .insert({ workspace_id: id, user_id, role });
+      if (error) {
+        if (error.code === "23505") {
+          throw new ApiError(409, "already_member", "That user is already in this workspace");
+        }
+        throw new ApiError(500, "db_error", error.message);
+      }
+      return json({ workspace_id: id, user_id, role }, 201);
     }
 
     const { data, error } = await supabase

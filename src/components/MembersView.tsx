@@ -5,7 +5,7 @@ import { Copy, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch } from "@/lib/api";
-import type { Invitation, Role, WorkspaceMember } from "@/lib/types";
+import type { DirectoryUser, Invitation, Role, WorkspaceMember } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,11 +26,13 @@ export function MembersView() {
   const { current } = useWorkspace();
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [directory, setDirectory] = useState<DirectoryUser[]>([]);
   const [role, setRole] = useState<Role>("admin");
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteRole, setInviteRole] = useState<Role>("customer");
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!current) return;
@@ -41,6 +43,14 @@ export function MembersView() {
       setMembers(data.members);
       setInvitations(data.invitations);
       setRole(data.role);
+      if (data.role === "admin") {
+        try {
+          const dir = await apiFetch<{ users: DirectoryUser[] }>("/api/users");
+          setDirectory(dir.users);
+        } catch {
+          /* directory is admin-only sugar — the page works without it */
+        }
+      }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -75,6 +85,23 @@ export function MembersView() {
       toast.error((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function addUser(userId: string, email: string) {
+    if (!current) return;
+    setAdding(userId);
+    try {
+      await apiFetch(`/api/workspaces/${current.id}/members`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId, role: "customer" }),
+      });
+      toast.success(`${email} added to ${current.name}`);
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAdding(null);
     }
   }
 
@@ -208,6 +235,63 @@ export function MembersView() {
               </tbody>
             </table>
           </div>
+
+          {isAdmin && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-medium text-muted-foreground">Users</h2>
+              <p className="text-xs text-muted-foreground">
+                Everyone who has signed up. Add someone to put them in this workspace — until
+                then they see &ldquo;no active workspace&rdquo; when they log in.
+              </p>
+              <div className="overflow-hidden rounded-lg border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2.5 font-medium">Email</th>
+                      <th className="px-4 py-2.5 font-medium">Signed up</th>
+                      <th className="px-4 py-2.5 font-medium">Workspaces</th>
+                      <th className="px-4 py-2.5" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {directory.map((u) => {
+                      const isMemberHere = members.some((m) => m.user_id === u.user_id);
+                      return (
+                        <tr key={u.user_id} className="border-t">
+                          <td className="px-4 py-3 font-medium">{u.email}</td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {formatDate(u.created_at)}
+                          </td>
+                          <td className="px-4 py-3">
+                            {u.workspace_count === 0 ? (
+                              <Badge variant="warning">No workspace</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">{u.workspace_count}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {isMemberHere ? (
+                              <span className="text-xs text-muted-foreground">In this workspace</span>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={adding === u.user_id}
+                                onClick={() => addUser(u.user_id, u.email)}
+                              >
+                                <UserPlus className="h-4 w-4" />
+                                {adding === u.user_id ? "Adding…" : "Add to workspace"}
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {isAdmin && invitations.length > 0 && (
             <div className="space-y-2">
