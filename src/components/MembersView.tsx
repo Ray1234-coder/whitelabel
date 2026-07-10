@@ -135,37 +135,39 @@ export function MembersView() {
           <h1 className="text-2xl font-semibold tracking-tight">Members</h1>
           <p className="text-sm text-muted-foreground">{current.name}</p>
         </div>
-        {isAdmin && (
-          <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <UserPlus className="h-4 w-4" />
-                Invite member
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Invite member</DialogTitle>
-                <DialogDescription>
-                  Create an invite link and share it. Anyone who opens it joins this workspace as an
-                  {inviteRole === "admin" ? " admin." : " customer."}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${
-                    inviteRole === "customer"
-                      ? "border-primary bg-muted"
-                      : "border-input hover:bg-muted/60"
-                  }`}
-                  onClick={() => setInviteRole("customer")}
-                >
-                  <span className="block font-medium">Customer</span>
-                  <span className="mt-1 block text-muted-foreground">
-                    Can access assigned agents, but cannot manage members or create agents.
-                  </span>
-                </button>
+        <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <UserPlus className="h-4 w-4" />
+              Invite member
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Invite member</DialogTitle>
+              <DialogDescription>
+                Create an invite link and share it. Anyone who opens it joins this workspace as
+                {inviteRole === "admin" ? " an admin." : " a customer."}
+              </DialogDescription>
+            </DialogHeader>
+            {/* Only admins can invite another admin; everyone can invite customers. */}
+            <div className={isAdmin ? "grid grid-cols-2 gap-3" : "grid gap-3"}>
+              <button
+                type="button"
+                className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                  inviteRole === "customer"
+                    ? "border-primary bg-muted"
+                    : "border-input hover:bg-muted/60"
+                }`}
+                onClick={() => setInviteRole("customer")}
+              >
+                <span className="block font-medium">Customer</span>
+                <span className="mt-1 block text-muted-foreground">
+                  Can access assigned agents and invite other customers, but cannot manage members
+                  or create agents.
+                </span>
+              </button>
+              {isAdmin && (
                 <button
                   type="button"
                   className={`rounded-lg border p-3 text-left text-sm transition-colors ${
@@ -180,18 +182,18 @@ export function MembersView() {
                     Can manage agents, members, invitations, and workspace settings.
                   </span>
                 </button>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setInviteOpen(false)} disabled={busy}>
-                  Cancel
-                </Button>
-                <Button onClick={createInvite} disabled={busy}>
-                  {busy ? "Creating..." : "Create invite link"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setInviteOpen(false)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button onClick={createInvite} disabled={busy}>
+                {busy ? "Creating..." : "Create invite link"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {loading ? (
@@ -293,7 +295,7 @@ export function MembersView() {
             </div>
           )}
 
-          {isAdmin && invitations.length > 0 && (
+          {invitations.length > 0 && (
             <div className="space-y-2">
               <h2 className="text-sm font-medium text-muted-foreground">Pending invitations</h2>
               <div className="overflow-hidden rounded-lg border">

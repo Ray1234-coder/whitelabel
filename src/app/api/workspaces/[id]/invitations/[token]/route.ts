@@ -1,4 +1,4 @@
-import { requireAdmin, requireUser } from "@/lib/auth";
+import { requireMember, requireUser } from "@/lib/auth";
 import { ApiError, handleError, json } from "@/lib/http";
 
 type Ctx = { params: Promise<{ id: string; token: string }> };
@@ -7,7 +7,9 @@ export async function DELETE(_request: Request, { params }: Ctx) {
   try {
     const { id, token } = await params;
     const { supabase, user } = await requireUser();
-    await requireAdmin(supabase, id, user.id);
+    // Must belong to the workspace; RLS then limits the delete to invites the
+    // caller may revoke (their own, or any if they're an admin).
+    await requireMember(supabase, id, user.id);
 
     const { error } = await supabase
       .from("invitations")

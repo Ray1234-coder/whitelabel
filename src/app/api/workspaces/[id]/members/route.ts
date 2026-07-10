@@ -1,4 +1,4 @@
-import { requireAdmin, requireMember, requireUser } from "@/lib/auth";
+import { requireMember, requireUser } from "@/lib/auth";
 import { ApiError, handleError, json, readJson } from "@/lib/http";
 import type { Invitation, Role, WorkspaceMember } from "@/lib/types";
 
@@ -13,15 +13,14 @@ export async function GET(_request: Request, { params }: Ctx) {
     const { data: members, error } = await supabase.rpc("get_workspace_members", { p_workspace: id });
     if (error) throw new ApiError(500, "db_error", error.message);
 
-    let invitations: Invitation[] = [];
-    if (role === "admin") {
-      const { data: inv } = await supabase
-        .from("invitations")
-        .select("*")
-        .eq("workspace_id", id)
-        .order("created_at", { ascending: false });
-      invitations = (inv as Invitation[]) ?? [];
-    }
+    // RLS scopes this: admins see every invite; a customer sees only the ones
+    // they created (so they can copy or revoke their own links).
+    const { data: inv } = await supabase
+      .from("invitations")
+      .select("*")
+      .eq("workspace_id", id)
+      .order("created_at", { ascending: false });
+    const invitations = (inv as Invitation[]) ?? [];
 
     return json({ members: (members as WorkspaceMember[]) ?? [], invitations, role });
   } catch (e) {
@@ -33,17 +32,31 @@ export async function POST(request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
     const { supabase, user } = await requireUser();
-    await requireAdmin(supabase, id, user.id);
+    // Any member may invite coworkers; admin-only powers are gated below.
+    const callerRole = await requireMember(supabase, id, user.id);
+    const callerIsAdmin = callerRole === "admin";
     const { role = "customer", user_id } = await readJson<{ role?: Role; user_id?: string }>(
       request
     );
     if (!["admin", "customer"].includes(role)) {
       throw new ApiError(400, "invalid_request", "Invalid role");
     }
+    // Only an admin can grant admin. RLS enforces this too — defense in depth.
+    if (role === "admin" && !callerIsAdmin) {
+      throw new ApiError(403, "forbidden", "Only an admin can add another admin");
+    }
 
-    // With a user_id, add that signed-up account to the workspace directly
-    // (no invite link) — RLS allows the insert because the caller is an admin.
+    // With a user_id, add that signed-up account to the workspace directly (no
+    // invite link). Admin-only: it needs the user directory. Customers add
+    // people by sharing an invite link instead.
     if (user_id) {
+      if (!callerIsAdmin) {
+        throw new ApiError(
+          403,
+          "forbidden",
+          "Only an admin can add an existing account directly — share an invite link instead."
+        );
+      }
       const { error } = await supabase
         .from("memberships")
         .insert({ workspace_id: id, user_id, role });
