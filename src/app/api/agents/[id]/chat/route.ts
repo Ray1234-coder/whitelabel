@@ -15,13 +15,18 @@ export async function POST(request: Request, { params }: Ctx) {
     const row = await getAgentRow(supabase, id);
     await requireMember(supabase, row.workspace_id, user.id);
 
-    const { input, session_id, onboarding } = await readJson<{
+    const { input, session_id, onboarding, files } = await readJson<{
       input?: string;
       session_id?: string;
       onboarding?: boolean;
+      files?: string[];
     }>(request);
     const trimmed = (input || "").trim();
     if (!trimmed) throw new ApiError(400, "invalid_request", "input is required");
+
+    // Attachments the browser already uploaded via the files route — pass their
+    // workspace paths through; the agent reads them from disk alongside the text.
+    const attachments = Array.isArray(files) ? files.filter((f) => typeof f === "string" && f) : [];
 
     // Frame the first message of a new thread with Workify guidance so the agent
     // meets non-technical users at their level. A "Get started" click sends the
@@ -36,6 +41,7 @@ export async function POST(request: Request, { params }: Ctx) {
       signal: request.signal,
       body: JSON.stringify({
         input: outgoing,
+        ...(attachments.length ? { files: attachments } : {}),
         ...(session_id ? { session_id } : {}),
         // Apply the admin-chosen model, if any, as a per-turn override.
         ...(row.model ? { model: row.model } : {}),

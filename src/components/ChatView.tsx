@@ -4,7 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, ArrowUp, MessageSquare, Plus, Sparkles, Wrench } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUp,
+  Loader2,
+  MessageSquare,
+  Paperclip,
+  Plus,
+  Sparkles,
+  Wrench,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { stripHouseStyle } from "@/config/houseStyle";
@@ -164,9 +174,12 @@ export function ChatView({ agentId }: { agentId: string }) {
   const [streaming, setStreaming] = useState(false);
   const [activity, setActivity] = useState("");
   const [loading, setLoading] = useState(true);
+  const [attachments, setAttachments] = useState<{ path: string; name: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
   const sessionRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -243,10 +256,22 @@ export function ChatView({ agentId }: { agentId: string }) {
   }, [agentId, refreshSessions, loadSession]);
 
   const send = useCallback(async (override?: string, opts?: { onboarding?: boolean }) => {
-    const text = (override ?? input).trim();
-    if (!text || streaming) return;
+    const typed = (override ?? input).trim();
+    // Attachments belong only to the composer — starters/onboarding never carry files.
+    const files = override === undefined ? attachments : [];
+    if ((!typed && files.length === 0) || streaming || uploading) return;
+
+    // Show (and send) the filenames so the transcript makes sense; the agent also
+    // gets the file paths via the `files` array and reads them from disk.
+    const names = files.map((f) => f.name);
+    const attachLine = names.length ? `📎 ${names.join(", ")}` : "";
+    const text = typed
+      ? [typed, attachLine].filter(Boolean).join("\n\n")
+      : `Here's ${names.length > 1 ? `${names.length} files` : "a file"} for you:\n${attachLine}`;
+
     const isNewSession = !sessionRef.current;
     setInput("");
+    if (override === undefined) setAttachments([]);
     setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
     setStreaming(true);
     setActivity("Thinking…");
@@ -315,6 +340,7 @@ export function ChatView({ agentId }: { agentId: string }) {
         signal: controller.signal,
         body: JSON.stringify({
           input: text,
+          ...(files.length ? { files: files.map((f) => f.path) } : {}),
           ...(sessionRef.current ? { session_id: sessionRef.current } : {}),
           // Only meaningful on a new thread; the route ignores it once a session exists.
           ...(opts?.onboarding && !sessionRef.current ? { onboarding: true } : {}),
@@ -364,13 +390,49 @@ export function ChatView({ agentId }: { agentId: string }) {
         setActivity("");
       }
     }
-  }, [agentId, input, streaming, refreshSessions]);
+  }, [agentId, input, streaming, uploading, attachments, refreshSessions]);
 
   function newChat() {
     sessionRef.current = null;
     localStorage.removeItem(sessionKey(agentId));
     setActiveSession(null);
     setMessages([]);
+    setAttachments([]);
+  }
+
+  const uploadFiles = useCallback(
+    async (list: FileList | null) => {
+      const picked = list ? Array.from(list) : [];
+      if (picked.length === 0) return;
+      setUploading(true);
+      try {
+        for (const file of picked) {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await fetch(`/api/agents/${agentId}/files`, { method: "POST", body: fd });
+          if (!res.ok) {
+            const body = (await res.json().catch(() => null)) as {
+              error?: { message?: string };
+            } | null;
+            throw new Error(body?.error?.message || `Couldn't upload ${file.name}`);
+          }
+          const data = (await res.json()) as { path: string; name: string };
+          if (mountedRef.current) {
+            setAttachments((a) => [...a, { path: data.path, name: data.name }]);
+          }
+        }
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        if (mountedRef.current) setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    },
+    [agentId]
+  );
+
+  function removeAttachment(path: string) {
+    setAttachments((a) => a.filter((f) => f.path !== path));
   }
 
   const agentName = agent?.name || "Agent";
@@ -522,29 +584,83 @@ export function ChatView({ agentId }: { agentId: string }) {
         </div>
 
         <form
-          className="flex items-end gap-2 border-t pt-4"
+          className="flex flex-col gap-2 border-t pt-4"
           onSubmit={(e) => {
             e.preventDefault();
             send();
           }}
         >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            rows={1}
-            placeholder={streaming ? "Waiting for the agent…" : `Message ${agentName}`}
-            disabled={streaming}
-            className="max-h-40 min-h-[44px] flex-1 resize-none rounded-xl border bg-background px-4 py-2.5 text-sm focus:border-ring focus:outline-none disabled:opacity-60"
-          />
-          <Button type="submit" size="icon" className="h-11 w-11 rounded-xl" disabled={streaming || !input.trim()} aria-label="Send message">
-            <ArrowUp className="h-4 w-4" />
-          </Button>
+          {(attachments.length > 0 || uploading) && (
+            <div className="flex flex-wrap gap-2">
+              {attachments.map((f) => (
+                <span
+                  key={f.path}
+                  className="flex items-center gap-1.5 rounded-lg border bg-muted/50 py-1 pl-2.5 pr-1 text-xs"
+                >
+                  <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span className="max-w-[12rem] truncate">{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(f.path)}
+                    disabled={streaming}
+                    className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              {uploading && (
+                <span className="flex items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Uploading…
+                </span>
+              )}
+            </div>
+          )}
+          <div className="flex items-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => uploadFiles(e.target.files)}
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="h-11 w-11 shrink-0 rounded-xl"
+              disabled={streaming || uploading}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Attach files"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              rows={1}
+              placeholder={streaming ? "Waiting for the agent…" : `Message ${agentName}`}
+              disabled={streaming}
+              className="max-h-40 min-h-[44px] flex-1 resize-none rounded-xl border bg-background px-4 py-2.5 text-sm focus:border-ring focus:outline-none disabled:opacity-60"
+            />
+            <Button
+              type="submit"
+              size="icon"
+              className="h-11 w-11 shrink-0 rounded-xl"
+              disabled={streaming || uploading || (!input.trim() && attachments.length === 0)}
+              aria-label="Send message"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+          </div>
         </form>
       </div>
     </div>
