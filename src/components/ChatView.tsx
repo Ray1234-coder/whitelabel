@@ -34,6 +34,27 @@ function sessionKey(agentId: string) {
   return `workify_chat_session_${agentId}`;
 }
 
+const STARTERS = [
+  {
+    label: "Connect my Gmail",
+    prompt: "Can you connect to my Gmail so you can read and send emails for me?",
+  },
+  {
+    label: "What can you do?",
+    prompt: "What can you do for me? List your capabilities and the apps you can connect to.",
+  },
+  {
+    label: "Send messages for me",
+    prompt:
+      "Can you send messages for me — WhatsApp, SMS, or Slack? What messaging apps can you connect to?",
+  },
+  {
+    label: "Put you on my website",
+    prompt:
+      "I want to integrate you into another website, like a support chat widget. How would we set that up?",
+  },
+];
+
 function fmtWhen(v: number | string | null): string {
   if (v == null) return "";
   // Numeric timestamps may arrive as epoch seconds or milliseconds.
@@ -211,8 +232,8 @@ export function ChatView({ agentId }: { agentId: string }) {
     };
   }, [agentId, refreshSessions, loadSession]);
 
-  const send = useCallback(async () => {
-    const text = input.trim();
+  const send = useCallback(async (override?: string) => {
+    const text = (override ?? input).trim();
     if (!text || streaming) return;
     const isNewSession = !sessionRef.current;
     setInput("");
@@ -415,12 +436,28 @@ export function ChatView({ agentId }: { agentId: string }) {
         <div className="flex-1 space-y-4 overflow-y-auto py-6">
           {messages.length === 0 && !loading && (
             <div className="flex h-full items-center justify-center">
-              <div className="max-w-sm text-center">
+              <div className="w-full max-w-md text-center">
                 <MessageSquare className="mx-auto h-8 w-8 text-muted-foreground/40" />
                 <p className="mt-3 text-sm text-muted-foreground">
                   Ask {agentName} anything — it can browse, write, code, and work with files.
                   Every chat is saved on the left so you can pick up where you left off.
                 </p>
+                <div className="mt-6 grid gap-2 sm:grid-cols-2">
+                  {STARTERS.map((s) => (
+                    <button
+                      key={s.label}
+                      type="button"
+                      disabled={streaming}
+                      onClick={() => send(s.prompt)}
+                      className="rounded-xl border bg-background px-4 py-3 text-left text-sm transition-colors hover:border-ring hover:bg-accent/40"
+                    >
+                      <span className="font-medium">{s.label}</span>
+                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                        {s.prompt}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
