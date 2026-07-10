@@ -1,6 +1,7 @@
 import { dataPlaneFetch } from "@/lib/agent37";
 import { getAgentRow, requireMember, requireUser } from "@/lib/auth";
 import { ApiError, handleError, readJson } from "@/lib/http";
+import { HOUSE_STYLE, HOUSE_STYLE_SEP } from "@/config/houseStyle";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -17,11 +18,16 @@ export async function POST(request: Request, { params }: Ctx) {
     const trimmed = (input || "").trim();
     if (!trimmed) throw new ApiError(400, "invalid_request", "input is required");
 
+    // Frame the first message of a new thread with the Workify house style so the
+    // agent meets non-technical users at their level. Continuing threads keep the
+    // tone via session context, so we only prepend when starting fresh.
+    const outgoing = session_id ? trimmed : `${HOUSE_STYLE}${HOUSE_STYLE_SEP}${trimmed}`;
+
     const upstream = await dataPlaneFetch(id, "/responses", {
       method: "POST",
       signal: request.signal,
       body: JSON.stringify({
-        input: trimmed,
+        input: outgoing,
         ...(session_id ? { session_id } : {}),
         // Apply the admin-chosen model, if any, as a per-turn override.
         ...(row.model ? { model: row.model } : {}),

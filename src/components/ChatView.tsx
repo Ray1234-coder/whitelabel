@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import { ArrowLeft, ArrowUp, MessageSquare, Plus, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { stripHouseStyle } from "@/config/houseStyle";
 import type { AgentRow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -193,7 +194,10 @@ export function ChatView({ agentId }: { agentId: string }) {
         setMessages(
           (data.history ?? [])
             .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
-            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
+            .map((m) => ({
+              role: m.role as "user" | "assistant",
+              content: m.role === "user" ? stripHouseStyle(m.content) : m.content,
+            }))
         );
         sessionRef.current = sid;
         setActiveSession(sid);
