@@ -18,6 +18,22 @@ export interface WorkspaceMember {
   created_at: string;
 }
 
+export interface Automation {
+  id: string;
+  workspace_id: string;
+  agent37_id: string;
+  name: string;
+  instructions: string;
+  trigger_type: "schedule" | "webhook";
+  cadence: "hourly" | "daily" | "weekly" | null;
+  webhook_token: string | null;
+  enabled: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_status: string | null;
+  created_at: string;
+}
+
 export interface DirectoryUser {
   user_id: string;
   email: string;

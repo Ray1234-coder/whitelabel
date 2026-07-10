@@ -37,7 +37,11 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/invite") ||
     // Stripe webhooks arrive with no session cookie and must not be redirected;
     // the route verifies the Stripe signature itself.
-    pathname.startsWith("/api/stripe");
+    pathname.startsWith("/api/stripe") ||
+    // Automation entry points also have no session: inbound webhooks are
+    // guarded by their unguessable token, the cron endpoint by CRON_SECRET.
+    pathname.startsWith("/api/hooks") ||
+    pathname.startsWith("/api/cron");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
