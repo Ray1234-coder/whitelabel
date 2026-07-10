@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, ArrowUp, MessageSquare, Plus, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowUp, MessageSquare, Plus, Sparkles, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { stripHouseStyle } from "@/config/houseStyle";
@@ -34,6 +34,12 @@ interface SessionMeta {
 function sessionKey(agentId: string) {
   return `workify_chat_session_${agentId}`;
 }
+
+// The visible first message a "Get started" click sends. The agent receives it
+// alongside the hidden onboarding intake (server-side), which turns it into a
+// guided discovery rather than a plain capability dump.
+const GET_STARTED_KICKOFF =
+  "I'm just getting started with you. Can you help me figure out how you could help with my work?";
 
 const STARTERS = [
   {
@@ -236,7 +242,7 @@ export function ChatView({ agentId }: { agentId: string }) {
     };
   }, [agentId, refreshSessions, loadSession]);
 
-  const send = useCallback(async (override?: string) => {
+  const send = useCallback(async (override?: string, opts?: { onboarding?: boolean }) => {
     const text = (override ?? input).trim();
     if (!text || streaming) return;
     const isNewSession = !sessionRef.current;
@@ -310,6 +316,8 @@ export function ChatView({ agentId }: { agentId: string }) {
         body: JSON.stringify({
           input: text,
           ...(sessionRef.current ? { session_id: sessionRef.current } : {}),
+          // Only meaningful on a new thread; the route ignores it once a session exists.
+          ...(opts?.onboarding && !sessionRef.current ? { onboarding: true } : {}),
         }),
       });
 
@@ -446,7 +454,27 @@ export function ChatView({ agentId }: { agentId: string }) {
                   Ask {agentName} anything — it can browse, write, code, and work with files.
                   Every chat is saved on the left so you can pick up where you left off.
                 </p>
-                <div className="mt-6 grid gap-2 sm:grid-cols-2">
+
+                <button
+                  type="button"
+                  disabled={streaming}
+                  onClick={() => send(GET_STARTED_KICKOFF, { onboarding: true })}
+                  className="group mt-6 flex w-full items-center gap-3 rounded-2xl bg-primary px-5 py-4 text-left text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15">
+                    <Sparkles className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">Get started</span>
+                    <span className="mt-0.5 block text-xs text-primary-foreground/80">
+                      Answer a couple of quick questions and {agentName} will find what it can
+                      take off your plate.
+                    </span>
+                  </span>
+                </button>
+
+                <p className="mt-6 text-xs font-medium text-muted-foreground">Or jump right in</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {STARTERS.map((s) => (
                     <button
                       key={s.label}

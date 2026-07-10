@@ -2,6 +2,7 @@ import { dataPlaneFetch } from "@/lib/agent37";
 import { getAgentRow, requireMember, requireUser } from "@/lib/auth";
 import { ApiError, handleError, readJson } from "@/lib/http";
 import { HOUSE_STYLE, HOUSE_STYLE_SEP } from "@/config/houseStyle";
+import { ONBOARDING_INTAKE } from "@/config/onboarding";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -14,14 +15,21 @@ export async function POST(request: Request, { params }: Ctx) {
     const row = await getAgentRow(supabase, id);
     await requireMember(supabase, row.workspace_id, user.id);
 
-    const { input, session_id } = await readJson<{ input?: string; session_id?: string }>(request);
+    const { input, session_id, onboarding } = await readJson<{
+      input?: string;
+      session_id?: string;
+      onboarding?: boolean;
+    }>(request);
     const trimmed = (input || "").trim();
     if (!trimmed) throw new ApiError(400, "invalid_request", "input is required");
 
-    // Frame the first message of a new thread with the Workify house style so the
-    // agent meets non-technical users at their level. Continuing threads keep the
-    // tone via session context, so we only prepend when starting fresh.
-    const outgoing = session_id ? trimmed : `${HOUSE_STYLE}${HOUSE_STYLE_SEP}${trimmed}`;
+    // Frame the first message of a new thread with Workify guidance so the agent
+    // meets non-technical users at their level. A "Get started" click sends the
+    // onboarding intake (which drives a guided discovery); every other new thread
+    // gets the house style. Continuing threads keep the tone via session context,
+    // so we only prepend when starting fresh.
+    const preamble = onboarding ? ONBOARDING_INTAKE : HOUSE_STYLE;
+    const outgoing = session_id ? trimmed : `${preamble}${HOUSE_STYLE_SEP}${trimmed}`;
 
     const upstream = await dataPlaneFetch(id, "/responses", {
       method: "POST",
