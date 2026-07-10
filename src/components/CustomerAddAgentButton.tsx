@@ -5,15 +5,13 @@ import { Check, Gift, Headset, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import {
-  AGENT_TYPES,
+  DEFAULT_AGENT,
   FREE_RUNS_PER_DAY,
   SHAPE_PRESETS,
   customerMonthlyUsd,
 } from "@/config/agents";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -22,12 +20,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const DEFAULT_TEMPLATE =
-  AGENT_TYPES.find((a) => a.recommended)?.template ?? AGENT_TYPES[0].template;
+// Customers always get the recommended (Hermes) agent — no type choice — and a
+// sensible default AI budget they don't see (only admins tune those). They pick
+// a plan (free trial vs paid) and, for paid, a size.
+const CUSTOMER_TEMPLATE = DEFAULT_AGENT.template;
+const CUSTOMER_AI_BUDGET = DEFAULT_AGENT.monthlyCapUsd;
 
-// Customer self-serve agent creation. Two plans:
-//  - Free trial: one limited agent, no card, capped to a couple of runs/day.
-//  - Paid: monthly Stripe subscription (agent provisioned by the webhook).
 export function CustomerAddAgentButton({
   workspaceId,
   onCreated,
@@ -38,13 +36,10 @@ export function CustomerAddAgentButton({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<"free" | "paid">("free");
-  const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   const [shapeId, setShapeId] = useState(SHAPE_PRESETS[0].id);
-  const [cap, setCap] = useState("5");
 
   const shape = SHAPE_PRESETS.find((s) => s.id === shapeId) ?? SHAPE_PRESETS[0];
-  const capNum = Math.max(0, Number(cap) || 0);
-  const monthly = customerMonthlyUsd(shape.cpu, shape.memory, shape.disk, capNum);
+  const monthly = customerMonthlyUsd(shape.cpu, shape.memory, shape.disk, CUSTOMER_AI_BUDGET);
 
   async function startFree() {
     setBusy(true);
@@ -67,7 +62,11 @@ export function CustomerAddAgentButton({
         `/api/workspaces/${workspaceId}/billing/checkout`,
         {
           method: "POST",
-          body: JSON.stringify({ template, shape: shapeId, monthly_cap_usd: capNum }),
+          body: JSON.stringify({
+            template: CUSTOMER_TEMPLATE,
+            shape: shapeId,
+            monthly_cap_usd: CUSTOMER_AI_BUDGET,
+          }),
         }
       );
       window.location.href = url;
@@ -131,7 +130,7 @@ export function CustomerAddAgentButton({
                   {plan === "paid" && <Check className="ml-auto h-4 w-4 text-primary" />}
                 </div>
                 <p className="mt-1.5 text-xs text-muted-foreground">
-                  Unlimited runs, full size options. Billed monthly.
+                  Unlimited runs, bigger sizes. Billed monthly.
                 </p>
               </button>
             </div>
@@ -168,45 +167,12 @@ export function CustomerAddAgentButton({
               </div>
             ) : (
               <>
-                {/* Agent type */}
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Agent type</p>
-                  <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Agent type">
-                    {AGENT_TYPES.map((a) => (
-                      <button
-                        key={a.id}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setTemplate(a.template)}
-                        aria-pressed={template === a.template}
-                        className={cn(
-                          "rounded-lg border bg-background p-3 text-left transition-colors",
-                          template === a.template
-                            ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                            : "border-border hover:bg-accent/40"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium leading-none">{a.label}</p>
-                          {a.recommended && (
-                            <span className="text-xs text-muted-foreground">Recommended</span>
-                          )}
-                          {template === a.template && (
-                            <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />
-                          )}
-                        </div>
-                        <p className="mt-1.5 text-xs text-muted-foreground">{a.description}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Size */}
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Size</p>
                   <div className="grid gap-2" role="group" aria-label="Agent size">
                     {SHAPE_PRESETS.map((s) => {
-                      const price = customerMonthlyUsd(s.cpu, s.memory, s.disk, capNum);
+                      const price = customerMonthlyUsd(s.cpu, s.memory, s.disk, CUSTOMER_AI_BUDGET);
                       const selected = shapeId === s.id;
                       return (
                         <button
@@ -241,29 +207,6 @@ export function CustomerAddAgentButton({
                       );
                     })}
                   </div>
-                </div>
-
-                {/* AI budget */}
-                <div className="space-y-2">
-                  <Label htmlFor="cap">Monthly AI budget (per agent)</Label>
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                      $
-                    </span>
-                    <Input
-                      id="cap"
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={cap}
-                      onChange={(e) => setCap(e.target.value)}
-                      className="pl-6"
-                      disabled={busy}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    How much the agent can spend on AI each month. Included in your price below.
-                  </p>
                 </div>
 
                 {/* Price */}
