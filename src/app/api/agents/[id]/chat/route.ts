@@ -50,8 +50,21 @@ export async function POST(request: Request, { params }: Ctx) {
     // onboarding intake (which drives a guided discovery); every other new thread
     // gets the house style. Continuing threads keep the tone via session context,
     // so we only prepend when starting fresh.
-    const preamble = onboarding ? ONBOARDING_INTAKE : HOUSE_STYLE;
-    const outgoing = session_id ? trimmed : `${preamble}${HOUSE_STYLE_SEP}${trimmed}`;
+    let outgoing = trimmed;
+    if (!session_id) {
+      const preamble = onboarding ? ONBOARDING_INTAKE : HOUSE_STYLE;
+      // Give the agent the company knowledge base as context, if any.
+      const { data: kb } = await supabase
+        .from("knowledge_base")
+        .select("content")
+        .eq("workspace_id", row.workspace_id)
+        .maybeSingle();
+      const knowledge = (kb?.content || "").trim();
+      const knowledgeBlock = knowledge
+        ? `[What you know about this company — use it to help, keep it private]\n${knowledge.slice(0, 6000)}${HOUSE_STYLE_SEP}`
+        : "";
+      outgoing = `${preamble}${HOUSE_STYLE_SEP}${knowledgeBlock}${trimmed}`;
+    }
 
     const upstream = await dataPlaneFetch(id, "/responses", {
       method: "POST",

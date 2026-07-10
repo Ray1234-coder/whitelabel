@@ -18,16 +18,24 @@ export interface WorkspaceMember {
   created_at: string;
 }
 
+export interface WorkflowStep {
+  id?: string;
+  title: string;
+  instructions: string;
+}
+
 export interface Automation {
   id: string;
   workspace_id: string;
   agent37_id: string;
   name: string;
   instructions: string;
+  steps: WorkflowStep[] | null;
   trigger_type: "schedule" | "webhook";
   cadence: "hourly" | "daily" | "weekly" | null;
   webhook_token: string | null;
   enabled: boolean;
+  tested_at: string | null;
   next_run_at: string | null;
   last_run_at: string | null;
   last_status: string | null;

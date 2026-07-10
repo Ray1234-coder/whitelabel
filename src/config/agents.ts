@@ -58,6 +58,10 @@ export const FREE_AGENT = {
 } as const;
 export const FREE_RUNS_PER_DAY = 2;
 
+// Real (non-test) workflow runs allowed per day, per workflow. Testing is free
+// and unlimited; you can only "run" after a successful test.
+export const WORKFLOW_RUNS_PER_DAY = 5;
+
 export interface AgentTypeOption {
   id: string;
   template: string;

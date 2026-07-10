@@ -1,11 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  CADENCE_MS,
-  nextRunFromNow,
-  runAutomation,
-  type AutomationRow,
-  type Cadence,
-} from "@/lib/automations";
+import { CADENCE_MS, nextRunFromNow, runAutomation, type Cadence } from "@/lib/automations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,9 +23,10 @@ export async function GET(request: Request) {
 
   const { data: due, error } = await db
     .from("automations")
-    .select("id, workspace_id, agent37_id, instructions, cadence")
+    .select("id, cadence")
     .eq("trigger_type", "schedule")
     .eq("enabled", true)
+    .not("tested_at", "is", null)
     .lte("next_run_at", nowIso)
     .limit(25);
 
@@ -47,7 +42,7 @@ export async function GET(request: Request) {
       .update({ next_run_at: nextRunFromNow(cadence, Date.now()) })
       .eq("id", auto.id);
     try {
-      await runAutomation(auto as AutomationRow);
+      await runAutomation(auto.id, { mode: "run" });
       ran++;
     } catch {
       /* runAutomation logs its own failures */

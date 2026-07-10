@@ -26,13 +26,16 @@ When something is genuinely complex or technical (setting up an integration, any
 
 Always keep the goal in mind: make AI feel approachable and useful to someone who's never used it before.`;
 
-// A user turn we sent may be a first-of-thread message carrying a Workify
-// guidance block (the house style, or the "Get started" onboarding intake).
-// Strip the leading block so restored transcripts show only what the user typed.
+// A user turn we sent may be a first-of-thread message carrying one or more
+// injected blocks (the house style, the onboarding intake, and/or the company
+// knowledge base). Strip every leading bracketed block so restored transcripts
+// show only what the user actually typed.
 export function stripHouseStyle(text: string): string {
-  if (text.startsWith("[Workify ")) {
-    const idx = text.indexOf(HOUSE_STYLE_SEP);
-    if (idx !== -1) return text.slice(idx + HOUSE_STYLE_SEP.length);
+  let out = text;
+  while (out.startsWith("[Workify ") || out.startsWith("[What you know")) {
+    const idx = out.indexOf(HOUSE_STYLE_SEP);
+    if (idx === -1) break;
+    out = out.slice(idx + HOUSE_STYLE_SEP.length);
   }
-  return text;
+  return out;
 }

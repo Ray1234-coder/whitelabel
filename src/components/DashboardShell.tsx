@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard, LayoutGrid, LogOut, Settings, Users, Zap } from "lucide-react";
+import { BookOpen, CreditCard, LayoutGrid, LogOut, Settings, Users, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { branding } from "@/config/branding";
 import { useWorkspace } from "@/components/WorkspaceProvider";
@@ -12,7 +12,8 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Agents", icon: LayoutGrid, exact: true },
-  { href: "/dashboard/automations", label: "Automations", icon: Zap, exact: false },
+  { href: "/dashboard/automations", label: "Workflows", icon: Zap, exact: false },
+  { href: "/dashboard/knowledge", label: "Knowledge", icon: BookOpen, exact: false },
   { href: "/dashboard/members", label: "Members", icon: Users, exact: false },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard, exact: false },
   { href: "/dashboard/settings", label: "Settings", icon: Settings, exact: false },

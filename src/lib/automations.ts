@@ -1,6 +1,7 @@
 import "server-only";
 import { agent37, dataPlaneFetch } from "@/lib/agent37";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { WORKFLOW_RUNS_PER_DAY } from "@/config/agents";
 
 export const CADENCE_MS = {
   hourly: 60 * 60 * 1000,
@@ -13,34 +14,52 @@ export function nextRunFromNow(cadence: Cadence, fromMs: number): string {
   return new Date(fromMs + CADENCE_MS[cadence]).toISOString();
 }
 
-export interface AutomationRow {
-  id: string;
-  workspace_id: string;
-  agent37_id: string;
+export interface WorkflowStep {
+  id?: string;
+  title: string;
   instructions: string;
-  cadence: Cadence | null;
+}
+
+export interface StepResult {
+  title: string;
+  status: "ok" | "error" | "skipped";
+  output: string;
+}
+
+export interface RunResult {
+  status: "ok" | "error" | "skipped" | "limit";
+  detail: string;
+  steps: StepResult[];
 }
 
 type AdminDb = ReturnType<typeof createAdminClient>;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const today = () => new Date().toISOString().slice(0, 10);
+
+export async function getKnowledge(db: AdminDb, workspaceId: string): Promise<string> {
+  const { data } = await db
+    .from("knowledge_base")
+    .select("content")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  return (data?.content || "").slice(0, 6000);
+}
 
 async function logRun(
   db: AdminDb,
-  auto: AutomationRow,
+  automationId: string,
+  workspaceId: string,
   status: string,
   detail: string
 ): Promise<void> {
-  await db.from("automation_runs").insert({
-    automation_id: auto.id,
-    workspace_id: auto.workspace_id,
-    status,
-    detail: detail.slice(0, 1000),
-  });
+  await db
+    .from("automation_runs")
+    .insert({ automation_id: automationId, workspace_id: workspaceId, status, detail: detail.slice(0, 2000) });
   await db
     .from("automations")
     .update({ last_run_at: new Date().toISOString(), last_status: status })
-    .eq("id", auto.id);
+    .eq("id", automationId);
 }
 
 // Post one turn to the agent, waking it if it's asleep. Returns the output text.
@@ -60,7 +79,6 @@ async function callAgent(
         stream: false,
       }),
     });
-
     const raw = await upstream.text().catch(() => "");
     let body: Record<string, unknown> = {};
     try {
@@ -68,16 +86,12 @@ async function callAgent(
     } catch {
       /* non-JSON */
     }
-
     const unreachable =
       !upstream.ok ||
-      typeof body.error === "string" && /unreachable|not ready|waking|starting/i.test(body.error as string);
-
+      (typeof body.error === "string" && /unreachable|not ready|waking|starting/i.test(body.error));
     if (!unreachable) {
       return (body.output_text as string) ?? (body.output as string) ?? "";
     }
-
-    // Asleep / booting — start it and wait, then retry.
     try {
       await agent37.start(id);
     } catch {
@@ -88,50 +102,98 @@ async function callAgent(
   throw new Error("Agent didn't become ready in time");
 }
 
-// Run one automation. contextText is the webhook payload (undefined for schedules).
+// Run a workflow. mode 'test' runs freely and, on success, marks it tested.
+// mode 'run' requires a prior passing test and consumes a daily run.
 export async function runAutomation(
-  auto: AutomationRow,
-  contextText?: string
-): Promise<{ status: string; detail: string }> {
+  automationId: string,
+  opts: { contextText?: string; mode: "test" | "run" }
+): Promise<RunResult> {
   const db = createAdminClient();
+
+  const { data: auto } = await db.from("automations").select("*").eq("id", automationId).maybeSingle();
+  if (!auto) return { status: "error", detail: "Automation not found", steps: [] };
 
   const { data: agent } = await db
     .from("agents")
     .select("plan, model, provider, free_runs_date, free_runs_used")
     .eq("agent37_id", auto.agent37_id)
     .maybeSingle();
-
   if (!agent) {
-    await logRun(db, auto, "error", "The agent for this automation no longer exists.");
-    return { status: "error", detail: "agent missing" };
+    await logRun(db, auto.id, auto.workspace_id, "error", "The agent no longer exists.");
+    return { status: "error", detail: "agent missing", steps: [] };
   }
 
-  // Free-tier daily run cap (the runner has no user session, so enforce directly).
+  // Real runs: must be tested, and within the daily cap.
+  if (opts.mode === "run") {
+    if (!auto.tested_at) {
+      await logRun(db, auto.id, auto.workspace_id, "skipped", "Not tested yet.");
+      return { status: "skipped", detail: "Test this workflow before running it.", steps: [] };
+    }
+    let used = auto.runs_used ?? 0;
+    if (auto.runs_date !== today()) used = 0;
+    if (used >= WORKFLOW_RUNS_PER_DAY) {
+      await logRun(db, auto.id, auto.workspace_id, "limit", "Daily run limit reached.");
+      return {
+        status: "limit",
+        detail: `Daily run limit reached (${WORKFLOW_RUNS_PER_DAY}/day). Resets tomorrow.`,
+        steps: [],
+      };
+    }
+    await db.from("automations").update({ runs_date: today(), runs_used: used + 1 }).eq("id", auto.id);
+  }
+
+  // Free-tier agent cap (per agent), counted once per whole workflow run.
   if (agent.plan === "free") {
-    const today = new Date().toISOString().slice(0, 10);
     let used = agent.free_runs_used ?? 0;
-    if (agent.free_runs_date !== today) used = 0;
+    if (agent.free_runs_date !== today()) used = 0;
     if (used >= 2) {
-      await logRun(db, auto, "limit", "Free trial daily run limit reached — resets tomorrow.");
-      return { status: "limit", detail: "free limit reached" };
+      await logRun(db, auto.id, auto.workspace_id, "limit", "Free trial daily limit reached.");
+      return { status: "limit", detail: "Free trial daily run limit reached.", steps: [] };
     }
     await db
       .from("agents")
-      .update({ free_runs_date: today, free_runs_used: used + 1 })
+      .update({ free_runs_date: today(), free_runs_used: used + 1 })
       .eq("agent37_id", auto.agent37_id);
   }
 
-  const input = contextText
-    ? `${auto.instructions}\n\n--- Incoming event ---\n${contextText}`
-    : auto.instructions;
+  const kb = await getKnowledge(db, auto.workspace_id);
+  const steps: WorkflowStep[] =
+    Array.isArray(auto.steps) && auto.steps.length
+      ? (auto.steps as WorkflowStep[])
+      : [{ title: auto.name, instructions: auto.instructions }];
 
-  try {
-    const out = await callAgent(auto.agent37_id, input, agent.model ?? null, agent.provider ?? null);
-    await logRun(db, auto, "ok", out || "(no text output)");
-    return { status: "ok", detail: out };
-  } catch (e) {
-    const detail = (e as Error).message;
-    await logRun(db, auto, "error", detail);
-    return { status: "error", detail };
+  const results: StepResult[] = [];
+  let prevOutput = "";
+  let overall: RunResult["status"] = "ok";
+
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    if (overall === "error") {
+      results.push({ title: s.title, status: "skipped", output: "" });
+      continue;
+    }
+    const parts: string[] = [];
+    if (kb) parts.push(`What you know about this company:\n${kb}`);
+    if (i === 0 && opts.contextText) parts.push(`Incoming event:\n${opts.contextText}`);
+    if (prevOutput) parts.push(`Result of the previous step:\n${prevOutput}`);
+    parts.push(`Your task for this step:\n${s.instructions}`);
+    const input = parts.join("\n\n---\n\n");
+    try {
+      const out = await callAgent(auto.agent37_id, input, agent.model ?? null, agent.provider ?? null);
+      results.push({ title: s.title, status: "ok", output: out });
+      prevOutput = out;
+    } catch (e) {
+      results.push({ title: s.title, status: "error", output: (e as Error).message });
+      overall = "error";
+    }
   }
+
+  // A clean test unlocks running.
+  if (opts.mode === "test" && overall === "ok") {
+    await db.from("automations").update({ tested_at: new Date().toISOString() }).eq("id", auto.id);
+  }
+
+  const detail = results.map((r) => `${r.title}: ${r.status}`).join(" | ");
+  await logRun(db, auto.id, auto.workspace_id, overall, detail);
+  return { status: overall, detail, steps: results };
 }

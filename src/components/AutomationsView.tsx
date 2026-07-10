@@ -1,23 +1,50 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Clock, Copy, Play, Plus, Trash2, Webhook, Zap } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Copy,
+  FlaskConical,
+  Play,
+  Plus,
+  Trash2,
+  Webhook,
+  Zap,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch } from "@/lib/api";
-import type { Automation, MergedAgent } from "@/lib/types";
+import { WORKFLOW_RUNS_PER_DAY } from "@/config/agents";
+import type { Automation, MergedAgent, WorkflowStep } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+
+interface StepResult {
+  title: string;
+  status: "ok" | "error" | "skipped";
+  output: string;
+}
+interface RunResult {
+  status: string;
+  detail: string;
+  steps: StepResult[];
+}
+
+interface Draft {
+  id: string | null;
+  name: string;
+  agent37_id: string;
+  trigger_type: "schedule" | "webhook";
+  cadence: "hourly" | "daily" | "weekly";
+  steps: WorkflowStep[];
+}
 
 const CADENCES = [
   { id: "hourly", label: "Every hour" },
@@ -25,10 +52,27 @@ const CADENCES = [
   { id: "weekly", label: "Every week" },
 ] as const;
 
-function fmtWhen(iso: string | null) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? "—" : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+function blankDraft(agentId: string): Draft {
+  return {
+    id: null,
+    name: "",
+    agent37_id: agentId,
+    trigger_type: "schedule",
+    cadence: "daily",
+    steps: [{ title: "Step 1", instructions: "" }],
+  };
+}
+
+// A downward connector between two nodes on the map.
+function Connector() {
+  return (
+    <div className="flex justify-center py-1">
+      <div className="flex flex-col items-center text-muted-foreground/50">
+        <div className="h-4 w-px bg-border" />
+        <ChevronDown className="-mt-1 h-4 w-4" />
+      </div>
+    </div>
+  );
 }
 
 export function AutomationsView() {
@@ -36,16 +80,15 @@ export function AutomationsView() {
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [agents, setAgents] = useState<MergedAgent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [runningId, setRunningId] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "edit">("list");
 
-  // New-automation form
-  const [name, setName] = useState("");
-  const [agentId, setAgentId] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [triggerType, setTriggerType] = useState<"schedule" | "webhook">("schedule");
-  const [cadence, setCadence] = useState<"hourly" | "daily" | "weekly">("daily");
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [tested, setTested] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState<StepResult[] | null>(null);
 
   const load = useCallback(async () => {
     if (!current) return;
@@ -56,46 +99,186 @@ export function AutomationsView() {
       ]);
       setAutomations(a.automations);
       setAgents(ag.agents);
-      if (!agentId && ag.agents[0]) setAgentId(ag.agents[0].agent37_id);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [current, agentId]);
+  }, [current]);
 
   useEffect(() => {
     setLoading(true);
     load();
   }, [load]);
 
-  async function create() {
-    if (!current) return;
-    if (!name.trim() || !instructions.trim() || !agentId) {
-      toast.error("Give it a name, pick an agent, and describe what it should do.");
-      return;
+  function openNew() {
+    if (agents.length === 0) return;
+    setDraft(blankDraft(agents[0].agent37_id));
+    setResults(null);
+    setDirty(true); // new workflow must be saved before testing
+    setTested(false);
+    setView("edit");
+  }
+
+  function openExisting(a: Automation) {
+    setDraft({
+      id: a.id,
+      name: a.name,
+      agent37_id: a.agent37_id,
+      trigger_type: a.trigger_type,
+      cadence: (a.cadence as Draft["cadence"]) || "daily",
+      steps:
+        a.steps && a.steps.length > 0
+          ? a.steps.map((s) => ({ title: s.title, instructions: s.instructions }))
+          : [{ title: "Step 1", instructions: a.instructions }],
+    });
+    setResults(null);
+    setDirty(false);
+    setTested(!!a.tested_at);
+    setView("edit");
+  }
+
+  function patchDraft(p: Partial<Draft>) {
+    setDraft((d) => (d ? { ...d, ...p } : d));
+    setDirty(true);
+    setTested(false);
+    setResults(null);
+  }
+
+  function setStep(i: number, p: Partial<WorkflowStep>) {
+    setDraft((d) => {
+      if (!d) return d;
+      const steps = d.steps.map((s, idx) => (idx === i ? { ...s, ...p } : s));
+      return { ...d, steps };
+    });
+    setDirty(true);
+    setTested(false);
+    setResults(null);
+  }
+
+  function addStep() {
+    setDraft((d) => (d ? { ...d, steps: [...d.steps, { title: `Step ${d.steps.length + 1}`, instructions: "" }] } : d));
+    setDirty(true);
+    setTested(false);
+  }
+
+  function removeStep(i: number) {
+    setDraft((d) => (d && d.steps.length > 1 ? { ...d, steps: d.steps.filter((_, idx) => idx !== i) } : d));
+    setDirty(true);
+    setTested(false);
+  }
+
+  function moveStep(i: number, dir: -1 | 1) {
+    setDraft((d) => {
+      if (!d) return d;
+      const j = i + dir;
+      if (j < 0 || j >= d.steps.length) return d;
+      const steps = [...d.steps];
+      [steps[i], steps[j]] = [steps[j], steps[i]];
+      return { ...d, steps };
+    });
+    setDirty(true);
+    setTested(false);
+  }
+
+  async function save(): Promise<string | null> {
+    if (!current || !draft) return null;
+    if (!draft.name.trim()) {
+      toast.error("Give your workflow a name.");
+      return null;
     }
-    setBusy(true);
+    if (!draft.steps.some((s) => s.instructions.trim())) {
+      toast.error("Add at least one step with instructions.");
+      return null;
+    }
+    setSaving(true);
     try {
-      await apiFetch(`/api/workspaces/${current.id}/automations`, {
+      if (!draft.id) {
+        const { automation } = await apiFetch<{ automation: Automation }>(
+          `/api/workspaces/${current.id}/automations`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              agent37_id: draft.agent37_id,
+              name: draft.name.trim(),
+              steps: draft.steps,
+              trigger_type: draft.trigger_type,
+              cadence: draft.trigger_type === "schedule" ? draft.cadence : undefined,
+            }),
+          }
+        );
+        setDraft((d) => (d ? { ...d, id: automation.id } : d));
+        setDirty(false);
+        setTested(false);
+        await load();
+        return automation.id;
+      } else {
+        await apiFetch(`/api/workspaces/${current.id}/automations/${draft.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: draft.name.trim(), steps: draft.steps }),
+        });
+        setDirty(false);
+        setTested(false);
+        await load();
+        return draft.id;
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function test() {
+    if (!current || !draft) return;
+    let id = draft.id;
+    if (dirty || !id) {
+      id = await save();
+      if (!id) return;
+    }
+    setTesting(true);
+    setResults(null);
+    try {
+      const r = await apiFetch<RunResult>(`/api/workspaces/${current.id}/automations/${id}/run`, {
         method: "POST",
-        body: JSON.stringify({
-          agent37_id: agentId,
-          name: name.trim(),
-          instructions: instructions.trim(),
-          trigger_type: triggerType,
-          cadence: triggerType === "schedule" ? cadence : undefined,
-        }),
+        body: JSON.stringify({ mode: "test" }),
       });
-      toast.success("Automation created");
-      setOpen(false);
-      setName("");
-      setInstructions("");
+      setResults(r.steps);
+      if (r.status === "ok") {
+        setTested(true);
+        toast.success("Test passed — you can run this workflow now.");
+      } else if (r.status === "limit") {
+        toast.error(r.detail);
+      } else {
+        toast.error("A step failed — check the map and adjust.");
+      }
       load();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setBusy(false);
+      setTesting(false);
+    }
+  }
+
+  async function run() {
+    if (!current || !draft?.id) return;
+    setRunning(true);
+    try {
+      const r = await apiFetch<RunResult>(`/api/workspaces/${current.id}/automations/${draft.id}/run`, {
+        method: "POST",
+        body: JSON.stringify({ mode: "run" }),
+      });
+      setResults(r.steps.length ? r.steps : results);
+      if (r.status === "ok") toast.success("Ran successfully.");
+      else if (r.status === "limit") toast.error(r.detail);
+      else if (r.status === "skipped") toast.error(r.detail);
+      else toast.error("Run failed — check the map.");
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -122,44 +305,223 @@ export function AutomationsView() {
     }
   }
 
-  async function runNow(a: Automation) {
-    if (!current) return;
-    setRunningId(a.id);
-    try {
-      const r = await apiFetch<{ status: string; detail: string }>(
-        `/api/workspaces/${current.id}/automations/${a.id}/run`,
-        { method: "POST" }
-      );
-      if (r.status === "ok") toast.success("Ran successfully — check the agent's output.");
-      else if (r.status === "limit") toast.error("Free trial daily run limit reached.");
-      else toast.error(`Run failed: ${r.detail?.slice(0, 120) || "unknown error"}`);
-      load();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setRunningId(null);
-    }
-  }
-
-  function webhookUrl(token: string | null) {
-    if (!token) return "";
-    return `${window.location.origin}/api/hooks/${token}`;
-  }
-
   if (!current) return <p className="text-sm text-muted-foreground">No workspace selected.</p>;
 
+  // ---------- Builder ----------
+  if (view === "edit" && draft) {
+    const agentName = agents.find((a) => a.agent37_id === draft.agent37_id)?.name || "the agent";
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setView("list")} aria-label="Back">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-xl font-semibold tracking-tight">
+              {draft.id ? "Edit workflow" : "New workflow"}
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={save} disabled={saving || testing || running}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+            <Button variant="outline" onClick={test} disabled={testing || running || saving}>
+              <FlaskConical className="h-4 w-4" />
+              {testing ? "Testing…" : "Test"}
+            </Button>
+            <Button onClick={run} disabled={!tested || dirty || running || testing}>
+              <Play className="h-4 w-4" />
+              {running ? "Running…" : "Run"}
+            </Button>
+          </div>
+        </div>
+
+        {!tested && (
+          <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            Test the workflow first — <span className="font-medium">Run</span> unlocks once a test passes. You
+            get {WORKFLOW_RUNS_PER_DAY} runs per day after that.
+          </p>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Name</label>
+            <Input
+              value={draft.name}
+              onChange={(e) => patchDraft({ name: e.target.value })}
+              placeholder="e.g. Chase overdue invoices"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Agent</label>
+            <select
+              value={draft.agent37_id}
+              onChange={(e) => patchDraft({ agent37_id: e.target.value })}
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            >
+              {agents.map((a) => (
+                <option key={a.agent37_id} value={a.agent37_id}>
+                  {a.name || a.agent37_id}
+                  {a.plan === "free" ? " (free trial)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* The map */}
+        <div className="rounded-xl border bg-muted/20 p-4">
+          {/* Trigger node */}
+          <div className="mx-auto max-w-xl rounded-lg border bg-background p-3 shadow-sm">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              {draft.trigger_type === "schedule" ? (
+                <Clock className="h-4 w-4 text-primary" />
+              ) : (
+                <Webhook className="h-4 w-4 text-primary" />
+              )}
+              Trigger
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => patchDraft({ trigger_type: "schedule" })}
+                className={cn(
+                  "rounded-md border px-2 py-1",
+                  draft.trigger_type === "schedule" ? "border-primary bg-primary/5" : "hover:bg-accent/40"
+                )}
+              >
+                On a schedule
+              </button>
+              <button
+                type="button"
+                onClick={() => patchDraft({ trigger_type: "webhook" })}
+                className={cn(
+                  "rounded-md border px-2 py-1",
+                  draft.trigger_type === "webhook" ? "border-primary bg-primary/5" : "hover:bg-accent/40"
+                )}
+              >
+                On an event (webhook)
+              </button>
+              {draft.trigger_type === "schedule" && (
+                <select
+                  value={draft.cadence}
+                  onChange={(e) => patchDraft({ cadence: e.target.value as Draft["cadence"] })}
+                  className="ml-auto rounded-md border bg-background px-2 py-1"
+                >
+                  {CADENCES.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Step nodes */}
+          {draft.steps.map((s, i) => {
+            const res = results?.[i];
+            return (
+              <div key={i}>
+                <Connector />
+                <div className="mx-auto max-w-xl rounded-lg border bg-background p-3 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      {i + 1}
+                    </span>
+                    <Input
+                      value={s.title}
+                      onChange={(e) => setStep(i, { title: e.target.value })}
+                      className="h-8 border-0 px-1 text-sm font-medium focus-visible:ring-0"
+                    />
+                    {res && (
+                      <span className="ml-auto flex items-center gap-1 text-xs">
+                        {res.status === "ok" ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        ) : res.status === "error" ? (
+                          <XCircle className="h-4 w-4 text-red-600" />
+                        ) : (
+                          <span className="text-muted-foreground">skipped</span>
+                        )}
+                      </span>
+                    )}
+                    <div className="flex shrink-0 items-center">
+                      <button
+                        type="button"
+                        onClick={() => moveStep(i, -1)}
+                        disabled={i === 0}
+                        className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
+                        aria-label="Move up"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveStep(i, 1)}
+                        disabled={i === draft.steps.length - 1}
+                        className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
+                        aria-label="Move down"
+                      >
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeStep(i)}
+                        disabled={draft.steps.length === 1}
+                        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-red-600 disabled:opacity-30"
+                        aria-label="Remove step"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={s.instructions}
+                    onChange={(e) => setStep(i, { instructions: e.target.value })}
+                    rows={2}
+                    placeholder="What should the agent do in this step? (plain English)"
+                    className="mt-2 w-full resize-none rounded-md border bg-background px-2 py-1.5 text-sm focus:border-ring focus:outline-none"
+                  />
+                  {res && (res.output || res.status === "error") && (
+                    <div
+                      className={cn(
+                        "mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border p-2 text-xs",
+                        res.status === "error" ? "border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-400" : "bg-muted/40 text-muted-foreground"
+                      )}
+                    >
+                      {res.output || "(failed)"}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          <Connector />
+          <div className="mx-auto flex max-w-xl justify-center">
+            <Button variant="outline" size="sm" onClick={addStep}>
+              <Plus className="h-4 w-4" />
+              Add step
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- List ----------
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Automations</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Workflows</h1>
           <p className="text-sm text-muted-foreground">
-            Have an agent run on a schedule, or when something happens (via a webhook).
+            Map out what an agent should do, test it, then run it — on a schedule or from an event.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)} disabled={agents.length === 0}>
+        <Button onClick={openNew} disabled={agents.length === 0}>
           <Plus className="h-4 w-4" />
-          New automation
+          New workflow
         </Button>
       </div>
 
@@ -167,13 +529,13 @@ export function AutomationsView() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : agents.length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-sm text-muted-foreground">
-          Add an agent first — then you can automate it here.
+          Add an agent first — then you can build a workflow for it.
         </div>
       ) : automations.length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center">
           <Zap className="mx-auto h-8 w-8 text-muted-foreground/40" />
           <p className="mt-3 text-sm text-muted-foreground">
-            No automations yet. Create one to have an agent run on a schedule or react to an event.
+            No workflows yet. Build one, test it, and run it.
           </p>
         </div>
       ) : (
@@ -181,7 +543,7 @@ export function AutomationsView() {
           {automations.map((a) => (
             <div key={a.id} className="rounded-lg border p-4">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+                <button type="button" onClick={() => openExisting(a)} className="min-w-0 text-left">
                   <div className="flex items-center gap-2">
                     <p className="font-medium">{a.name}</p>
                     <Badge variant="secondary" className="gap-1">
@@ -197,45 +559,41 @@ export function AutomationsView() {
                         </>
                       )}
                     </Badge>
-                    {!a.enabled && <Badge variant="outline">Paused</Badge>}
-                    {a.last_status && (
-                      <span
-                        className={cn(
-                          "text-xs",
-                          a.last_status === "ok" ? "text-green-600" : a.last_status === "error" ? "text-red-600" : "text-muted-foreground"
-                        )}
-                      >
-                        last: {a.last_status} · {fmtWhen(a.last_run_at)}
-                      </span>
+                    {a.tested_at ? (
+                      <Badge className="gap-1 bg-green-600 hover:bg-green-600">
+                        <CheckCircle2 className="h-3 w-3" /> Tested
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">Not tested</Badge>
                     )}
+                    {!a.enabled && <Badge variant="outline">Paused</Badge>}
                   </div>
-                  <p className="mt-1 truncate text-sm text-muted-foreground">{a.instructions}</p>
-                  {a.trigger_type === "webhook" && a.webhook_token && (
-                    <button
-                      type="button"
+                  <p className="mt-1 truncate text-sm text-muted-foreground">
+                    {(a.steps?.length ?? 1)} step{(a.steps?.length ?? 1) === 1 ? "" : "s"} ·{" "}
+                    {a.last_status ? `last run: ${a.last_status}` : "never run"}
+                  </p>
+                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button variant="outline" size="sm" onClick={() => openExisting(a)}>
+                    Open
+                  </Button>
+                  {a.trigger_type === "webhook" && a.webhook_token && a.tested_at && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Copy webhook URL"
                       onClick={() => {
-                        navigator.clipboard.writeText(webhookUrl(a.webhook_token));
+                        navigator.clipboard.writeText(`${window.location.origin}/api/hooks/${a.webhook_token}`);
                         toast.success("Webhook URL copied");
                       }}
-                      className="mt-2 flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground hover:bg-accent/60"
                     >
-                      <Copy className="h-3 w-3" />
-                      {`…/api/hooks/${a.webhook_token.slice(0, 10)}…`}
-                    </button>
+                      <Copy className="h-4 w-4" />
+                    </Button>
                   )}
-                  {a.trigger_type === "schedule" && a.enabled && (
-                    <p className="mt-1 text-xs text-muted-foreground">Next run: {fmtWhen(a.next_run_at)}</p>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button variant="outline" size="sm" onClick={() => runNow(a)} disabled={runningId === a.id}>
-                    <Play className="h-4 w-4" />
-                    {runningId === a.id ? "Running…" : "Run now"}
-                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => toggle(a)}>
                     {a.enabled ? "Pause" : "Resume"}
                   </Button>
-                  <Button variant="ghost" size="icon" aria-label="Delete automation" onClick={() => remove(a)}>
+                  <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => remove(a)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -244,121 +602,6 @@ export function AutomationsView() {
           ))}
         </div>
       )}
-
-      {/* Create dialog */}
-      <Dialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>New automation</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="auto-name">Name</Label>
-              <Input
-                id="auto-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Chase overdue invoices"
-                disabled={busy}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="auto-agent">Agent</Label>
-              <select
-                id="auto-agent"
-                value={agentId}
-                onChange={(e) => setAgentId(e.target.value)}
-                disabled={busy}
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              >
-                {agents.map((a) => (
-                  <option key={a.agent37_id} value={a.agent37_id}>
-                    {a.name || a.agent37_id}
-                    {a.plan === "free" ? " (free trial)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="auto-instructions">What should it do?</Label>
-              <textarea
-                id="auto-instructions"
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                rows={4}
-                placeholder="Describe the task in plain English, e.g. 'Check the invoices sheet for anything overdue and email a friendly reminder.'"
-                disabled={busy}
-                className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Trigger</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTriggerType("schedule")}
-                  aria-pressed={triggerType === "schedule"}
-                  className={cn(
-                    "rounded-lg border p-3 text-left text-sm transition-colors",
-                    triggerType === "schedule" ? "border-primary bg-primary/5" : "hover:bg-accent/40"
-                  )}
-                >
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <Clock className="h-4 w-4" /> On a schedule
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">Runs on a cadence you choose.</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTriggerType("webhook")}
-                  aria-pressed={triggerType === "webhook"}
-                  className={cn(
-                    "rounded-lg border p-3 text-left text-sm transition-colors",
-                    triggerType === "webhook" ? "border-primary bg-primary/5" : "hover:bg-accent/40"
-                  )}
-                >
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <Webhook className="h-4 w-4" /> On an event
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    Gives you a URL to trigger it from outside.
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            {triggerType === "schedule" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="auto-cadence">How often</Label>
-                <select
-                  id="auto-cadence"
-                  value={cadence}
-                  onChange={(e) => setCadence(e.target.value as "hourly" | "daily" | "weekly")}
-                  disabled={busy}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                >
-                  {CADENCES.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button onClick={create} disabled={busy}>
-              {busy ? "Creating…" : "Create automation"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

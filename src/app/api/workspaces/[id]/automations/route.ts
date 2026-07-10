@@ -34,15 +34,30 @@ export async function POST(request: Request, { params }: Ctx) {
       agent37_id?: string;
       name?: string;
       instructions?: string;
+      steps?: { title?: string; instructions?: string }[];
       trigger_type?: "schedule" | "webhook";
       cadence?: Cadence;
     }>(request);
 
     const name = (body.name || "").trim();
-    const instructions = (body.instructions || "").trim();
     const agentId = body.agent37_id;
+
+    // Normalize steps (the mapped workflow). Fall back to a single instruction.
+    const cleanSteps = Array.isArray(body.steps)
+      ? body.steps
+          .map((s, i) => ({
+            title: (s.title || `Step ${i + 1}`).trim(),
+            instructions: (s.instructions || "").trim(),
+          }))
+          .filter((s) => s.instructions)
+      : [];
+    const instructions =
+      cleanSteps.length > 0
+        ? cleanSteps.map((s, i) => `${i + 1}. ${s.title}`).join("\n")
+        : (body.instructions || "").trim();
+
     if (!name || !instructions || !agentId) {
-      throw new ApiError(400, "invalid_request", "name, instructions and agent are required");
+      throw new ApiError(400, "invalid_request", "name, at least one step, and an agent are required");
     }
     if (body.trigger_type !== "schedule" && body.trigger_type !== "webhook") {
       throw new ApiError(400, "invalid_request", "trigger_type must be 'schedule' or 'webhook'");
@@ -62,6 +77,7 @@ export async function POST(request: Request, { params }: Ctx) {
       agent37_id: agentId,
       name,
       instructions,
+      steps: cleanSteps.length > 0 ? cleanSteps : null,
       trigger_type: body.trigger_type,
       created_by: user.id,
       enabled: true,

@@ -10,12 +10,31 @@ export async function PATCH(request: Request, { params }: Ctx) {
     const { supabase, user } = await requireUser();
     await requireMember(supabase, workspaceId, user.id);
 
-    const body = await readJson<{ enabled?: boolean; name?: string; instructions?: string }>(request);
+    const body = await readJson<{
+      enabled?: boolean;
+      name?: string;
+      steps?: { title?: string; instructions?: string }[];
+    }>(request);
     const patch: Record<string, unknown> = {};
     if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
     if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim();
-    if (typeof body.instructions === "string" && body.instructions.trim())
-      patch.instructions = body.instructions.trim();
+
+    // Editing the steps invalidates the previous test — must re-test before running.
+    if (Array.isArray(body.steps)) {
+      const cleanSteps = body.steps
+        .map((s, i) => ({
+          title: (s.title || `Step ${i + 1}`).trim(),
+          instructions: (s.instructions || "").trim(),
+        }))
+        .filter((s) => s.instructions);
+      if (cleanSteps.length === 0) {
+        throw new ApiError(400, "invalid_request", "a workflow needs at least one step");
+      }
+      patch.steps = cleanSteps;
+      patch.instructions = cleanSteps.map((s, i) => `${i + 1}. ${s.title}`).join("\n");
+      patch.tested_at = null;
+    }
+
     if (Object.keys(patch).length === 0) {
       throw new ApiError(400, "invalid_request", "nothing to update");
     }
