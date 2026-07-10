@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession, type DB } from "@/lib/auth";
 import { WorkspaceProvider } from "@/components/WorkspaceProvider";
 import { DashboardShell } from "@/components/DashboardShell";
+import { NoWorkspace } from "@/components/NoWorkspace";
 import type { Role, Workspace, WorkspaceWithRole } from "@/lib/types";
 
 async function loadWorkspaces(supabase: DB, userId: string): Promise<WorkspaceWithRole[]> {
@@ -22,6 +23,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let workspaces = await loadWorkspaces(supabase, user.id);
 
   if (workspaces.length === 0) {
+    // Only admins may create workspaces (the first user ever bootstraps one).
+    // Customers land here after sign-up and wait for an invite instead.
+    const { data: canCreate } = await supabase.rpc("can_create_workspace");
+    if (!canCreate) return <NoWorkspace userEmail={user.email ?? ""} />;
     await supabase.from("workspaces").insert({ name: "My Workspace", owner_id: user.id });
     workspaces = await loadWorkspaces(supabase, user.id);
   }

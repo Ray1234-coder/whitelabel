@@ -33,6 +33,9 @@ export async function POST(request: Request) {
     const trimmed = (name || "").trim();
     if (!trimmed) throw new ApiError(400, "invalid_request", "Workspace name is required");
 
+    const { data: canCreate } = await supabase.rpc("can_create_workspace");
+    if (!canCreate) throw new ApiError(403, "forbidden", "Only admins can create workspaces");
+
     const { data, error } = await supabase
       .from("workspaces")
       .insert({ name: trimmed, owner_id: user.id })

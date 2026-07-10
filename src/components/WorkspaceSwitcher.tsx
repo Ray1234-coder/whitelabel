@@ -28,6 +28,7 @@ import {
 
 export function WorkspaceSwitcher() {
   const { workspaces, current, setCurrentId, refresh } = useWorkspace();
+  const canCreate = workspaces.some((w) => w.role === "admin");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -69,11 +70,15 @@ export function WorkspaceSwitcher() {
               {w.id === current?.id && <Check className="h-4 w-4" />}
             </DropdownMenuItem>
           ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" />
-            New workspace
-          </DropdownMenuItem>
+          {canCreate && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setCreating(true)}>
+                <Plus className="h-4 w-4" />
+                New workspace
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
