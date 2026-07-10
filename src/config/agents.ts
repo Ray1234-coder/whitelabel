@@ -14,6 +14,21 @@ export function monthlyComputeUsd(cpu: number, memory: number, disk: number): nu
   return cpu * COMPUTE_RATES.cpu + memory * COMPUTE_RATES.memory + disk * COMPUTE_RATES.disk;
 }
 
+// Customer-facing markup. Customers who add their own agents (and pay via Stripe)
+// are billed this multiple of the underlying Agent37 cost. One knob — change here.
+export const PRICE_MULTIPLIER = 3;
+
+// The monthly price a customer pays for an agent: PRICE_MULTIPLIER × the worst-case
+// Agent37 cost (compute while running + the monthly AI budget cap).
+export function customerMonthlyUsd(
+  cpu: number,
+  memory: number,
+  disk: number,
+  aiCapUsd = 0
+): number {
+  return (monthlyComputeUsd(cpu, memory, disk) + Math.max(0, aiCapUsd)) * PRICE_MULTIPLIER;
+}
+
 // Selectable sizes at create time. Disk is the shape's default (range minimum).
 // The 1 vCPU size needs a dedicated template, so it is not offered here.
 export const SHAPE_PRESETS: Shape[] = [

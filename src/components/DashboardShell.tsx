@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, LogOut, Settings, Users } from "lucide-react";
+import { CreditCard, LayoutGrid, LogOut, Settings, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { branding } from "@/config/branding";
 import { useWorkspace } from "@/components/WorkspaceProvider";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/dashboard", label: "Agents", icon: LayoutGrid, exact: true },
   { href: "/dashboard/members", label: "Members", icon: Users, exact: false },
+  { href: "/dashboard/billing", label: "Billing", icon: CreditCard, exact: false },
   { href: "/dashboard/settings", label: "Settings", icon: Settings, exact: false },
 ];
 

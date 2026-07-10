@@ -8,6 +8,7 @@ import { isTransitional, statusVariant } from "@/lib/format";
 import type { MergedAgent, Role } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { CreateAgentButton } from "@/components/CreateAgentButton";
+import { CustomerAddAgentButton } from "@/components/CustomerAddAgentButton";
 import { AgentActionsMenu } from "@/components/AgentActionsMenu";
 import { AgentNameCell } from "@/components/AgentNameCell";
 
@@ -52,7 +53,13 @@ export function AgentsView() {
           <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
           <p className="text-sm text-muted-foreground">{current.name}</p>
         </div>
-        {role === "admin" && <CreateAgentButton workspaceId={current.id} onCreated={load} />}
+        {role === "admin" ? (
+          <CreateAgentButton workspaceId={current.id} onCreated={load} />
+        ) : (
+          // Customers add agents through paid checkout (Billing); the agent
+          // appears here once payment completes and the webhook provisions it.
+          <CustomerAddAgentButton workspaceId={current.id} />
+        )}
       </div>
 
       {loading ? (
