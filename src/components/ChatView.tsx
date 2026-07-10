@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import {
   ArrowLeft,
   ArrowUp,
+  CheckCircle2,
   Loader2,
   MessageSquare,
   Paperclip,
@@ -14,6 +15,7 @@ import {
   Sparkles,
   Wrench,
   X,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
@@ -22,9 +24,19 @@ import type { AgentRow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+interface ToolCall {
+  tool: string;
+  label?: string;
+  status: "running" | "ok" | "error";
+  error?: string;
+  duration_ms?: number;
+}
+
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  // Tool calls the agent made while producing this message (live during streaming).
+  tools?: ToolCall[];
 }
 
 interface SessionHistoryEntry {
@@ -120,6 +132,47 @@ function deltaText(data: string): string {
     /* non-JSON delta */
   }
   return "";
+}
+
+// Turn a raw tool id like "gmail.send_email" or "web_search" into something a
+// non-technical person can read at a glance: "Gmail send email", "Web search".
+function prettyTool(tool: string): string {
+  const cleaned = tool.replace(/[._]+/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "Tool";
+}
+
+// The live checklist of tools the agent used for one message — a spinner while a
+// tool runs, a green check when it succeeds, a red mark when it fails.
+function ToolList({ tools }: { tools: ToolCall[] }) {
+  return (
+    <div className="mb-2 space-y-1.5 rounded-lg border bg-background/60 px-3 py-2">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        Working
+      </p>
+      {tools.map((t, i) => (
+        <div key={i} className="flex items-center gap-2 text-xs">
+          {t.status === "running" ? (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+          ) : t.status === "ok" ? (
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />
+          ) : (
+            <XCircle className="h-3.5 w-3.5 shrink-0 text-red-600" />
+          )}
+          <span className="truncate font-medium">{t.label || prettyTool(t.tool)}</span>
+          {t.status === "ok" && t.duration_ms != null && (
+            <span className="shrink-0 text-[11px] text-muted-foreground">
+              {(t.duration_ms / 1000).toFixed(1)}s
+            </span>
+          )}
+          {t.status === "error" && (
+            <span className="truncate text-[11px] text-red-600">
+              {t.error ? `failed — ${t.error}` : "failed"}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function Markdown({ content }: { content: string }) {
@@ -280,6 +333,31 @@ export function ChatView({ agentId }: { agentId: string }) {
     abortRef.current = controller;
     let failed: string | null = null;
 
+    // Mutate the tool-call list on the in-flight assistant message (the last one).
+    const updateTools = (fn: (tools: ToolCall[]) => ToolCall[]) => {
+      if (!mountedRef.current) return;
+      setMessages((m) => {
+        const next = [...m];
+        const last = next[next.length - 1];
+        if (!last || last.role !== "assistant") return m;
+        next[next.length - 1] = { ...last, tools: fn(last.tools ?? []) };
+        return next;
+      });
+    };
+    // Match a completed/failed event to the most recent still-running call of the
+    // same tool (there are no call ids in the stream, so we pair by name + order).
+    const settleTool = (tool: string, patch: Partial<ToolCall>) =>
+      updateTools((tools) => {
+        for (let i = tools.length - 1; i >= 0; i--) {
+          if (tools[i].status === "running" && (!tool || tools[i].tool === tool)) {
+            const copy = [...tools];
+            copy[i] = { ...copy[i], ...patch };
+            return copy;
+          }
+        }
+        return [...tools, { tool, status: patch.status ?? "ok", ...patch }];
+      });
+
     const handleFrame = (frame: { event: string; data: string }) => {
       if (frame.event === "response.created") {
         try {
@@ -298,10 +376,8 @@ export function ChatView({ agentId }: { agentId: string }) {
           setActivity("");
           setMessages((m) => {
             const next = [...m];
-            next[next.length - 1] = {
-              role: "assistant",
-              content: next[next.length - 1].content + delta,
-            };
+            const prev = next[next.length - 1];
+            next[next.length - 1] = { ...prev, role: "assistant", content: prev.content + delta };
             return next;
           });
         }
@@ -312,7 +388,7 @@ export function ChatView({ agentId }: { agentId: string }) {
             const finalText = d.output_text;
             setMessages((m) => {
               const next = [...m];
-              next[next.length - 1] = { role: "assistant", content: finalText };
+              next[next.length - 1] = { ...next[next.length - 1], role: "assistant", content: finalText };
               return next;
             });
           }
@@ -320,7 +396,39 @@ export function ChatView({ agentId }: { agentId: string }) {
           /* keep streamed deltas */
         }
       } else if (frame.event === "response.tool_call.started") {
-        if (mountedRef.current) setActivity("Working…");
+        if (mountedRef.current) setActivity("");
+        let tool = "";
+        let label: string | undefined;
+        try {
+          const d = JSON.parse(frame.data) as { tool?: string; label?: string };
+          tool = d.tool || "";
+          label = d.label;
+        } catch {
+          /* tolerate */
+        }
+        updateTools((tools) => [...tools, { tool, label, status: "running" }]);
+      } else if (frame.event === "response.tool_call.completed") {
+        let tool = "";
+        let duration_ms: number | undefined;
+        try {
+          const d = JSON.parse(frame.data) as { tool?: string; duration_ms?: number };
+          tool = d.tool || "";
+          duration_ms = d.duration_ms;
+        } catch {
+          /* tolerate */
+        }
+        settleTool(tool, { status: "ok", duration_ms });
+      } else if (frame.event === "response.tool_call.failed") {
+        let tool = "";
+        let error: string | undefined;
+        try {
+          const d = JSON.parse(frame.data) as { tool?: string; error?: string | { message?: string } };
+          tool = d.tool || "";
+          error = typeof d.error === "string" ? d.error : d.error?.message;
+        } catch {
+          /* tolerate */
+        }
+        settleTool(tool, { status: "error", error });
       } else if (frame.event === "response.reasoning.delta") {
         if (mountedRef.current) setActivity("Thinking…");
       } else if (frame.event === "response.failed") {
@@ -376,13 +484,21 @@ export function ChatView({ agentId }: { agentId: string }) {
 
       if (failed && mountedRef.current) {
         toast.error(failed);
-        setMessages((m) => (m[m.length - 1]?.content === "" ? m.slice(0, -1) : m));
+        setMessages((m) => {
+          const last = m[m.length - 1];
+          // Drop the empty placeholder, but keep it if it recorded any tool activity.
+          return last && last.content === "" && !last.tools?.length ? m.slice(0, -1) : m;
+        });
       }
       if (isNewSession) refreshSessions();
     } catch (e) {
       if (!controller.signal.aborted && mountedRef.current) {
         toast.error((e as Error).message);
-        setMessages((m) => (m[m.length - 1]?.content === "" ? m.slice(0, -1) : m));
+        setMessages((m) => {
+          const last = m[m.length - 1];
+          // Drop the empty placeholder, but keep it if it recorded any tool activity.
+          return last && last.content === "" && !last.tools?.length ? m.slice(0, -1) : m;
+        });
       }
     } finally {
       if (mountedRef.current) {
@@ -563,9 +679,10 @@ export function ChatView({ agentId }: { agentId: string }) {
                 </div>
               ) : (
                 <div className="max-w-[85%] rounded-2xl rounded-bl-md border bg-muted/40 px-4 py-2.5 text-sm leading-relaxed">
+                  {m.tools && m.tools.length > 0 && <ToolList tools={m.tools} />}
                   {m.content ? (
                     <Markdown content={m.content} />
-                  ) : streaming && i === messages.length - 1 ? (
+                  ) : streaming && i === messages.length - 1 && !m.tools?.length ? (
                     "…"
                   ) : (
                     ""
