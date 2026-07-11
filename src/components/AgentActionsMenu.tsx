@@ -103,7 +103,7 @@ export function AgentActionsMenu({
                 className="h-8 w-8 rounded-full"
                 aria-label="Chat with this agent"
               >
-                <Link href={`/dashboard/agents/${agent.agent37_id}/chat`}>
+                <Link href={`/agent/${agent.agent37_id}`} target="_blank" rel="noopener noreferrer">
                   <MessageSquare className="h-4 w-4" />
                 </Link>
               </Button>

@@ -7,20 +7,25 @@ import remarkGfm from "remark-gfm";
 import {
   ArrowLeft,
   ArrowUp,
+  BookOpen,
   CheckCircle2,
+  Clock,
   Loader2,
   MessageSquare,
   Paperclip,
   Plus,
+  RefreshCw,
   Sparkles,
+  Webhook,
   Wrench,
   X,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { stripHouseStyle } from "@/config/houseStyle";
-import type { AgentRow } from "@/lib/types";
+import type { AgentRow, Automation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -218,7 +223,7 @@ function Markdown({ content }: { content: string }) {
   );
 }
 
-export function ChatView({ agentId }: { agentId: string }) {
+export function ChatView({ agentId, standalone }: { agentId: string; standalone?: boolean }) {
   const [agent, setAgent] = useState<AgentRow | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
@@ -229,6 +234,13 @@ export function ChatView({ agentId }: { agentId: string }) {
   const [loading, setLoading] = useState(true);
   const [attachments, setAttachments] = useState<{ path: string; name: string }[]>([]);
   const [uploading, setUploading] = useState(false);
+  // Right-side panel: Chats · Workflows · Knowledge, all in one place.
+  const [panelTab, setPanelTab] = useState<"chats" | "workflows" | "knowledge">("chats");
+  const [workflows, setWorkflows] = useState<Automation[] | null>(null);
+  const [kb, setKb] = useState("");
+  const [kbSaved, setKbSaved] = useState("");
+  const [kbSaving, setKbSaving] = useState(false);
+  const [kbLoaded, setKbLoaded] = useState(false);
   const sessionRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -551,54 +563,70 @@ export function ChatView({ agentId }: { agentId: string }) {
     setAttachments((a) => a.filter((f) => f.path !== path));
   }
 
+  const workspaceId = agent?.workspace_id ?? null;
+
+  const refreshWorkflows = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const d = await apiFetch<{ automations: Automation[] }>(
+        `/api/workspaces/${workspaceId}/automations`
+      );
+      if (mountedRef.current) setWorkflows(d.automations.filter((a) => a.agent37_id === agentId));
+    } catch {
+      /* panel is best-effort */
+    }
+  }, [workspaceId, agentId]);
+
+  const loadKb = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const d = await apiFetch<{ content: string }>(`/api/workspaces/${workspaceId}/knowledge`);
+      if (mountedRef.current) {
+        setKb(d.content);
+        setKbSaved(d.content);
+        setKbLoaded(true);
+      }
+    } catch {
+      /* panel is best-effort */
+    }
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (workspaceId) refreshWorkflows();
+  }, [workspaceId, refreshWorkflows]);
+
+  useEffect(() => {
+    if (panelTab === "workflows") refreshWorkflows();
+    if (panelTab === "knowledge" && !kbLoaded) loadKb();
+  }, [panelTab, refreshWorkflows, loadKb, kbLoaded]);
+
+  async function saveKb() {
+    if (!workspaceId) return;
+    setKbSaving(true);
+    try {
+      await apiFetch(`/api/workspaces/${workspaceId}/knowledge`, {
+        method: "PUT",
+        body: JSON.stringify({ content: kb }),
+      });
+      setKbSaved(kb);
+      toast.success("Saved — the agent will use this.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setKbSaving(false);
+    }
+  }
+
   const agentName = agent?.name || "Agent";
   const running = agent?.status === "running" || agent?.status === "sleeping";
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] gap-6 md:h-[calc(100vh-3.5rem)]">
-      {/* Previous chats */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r pr-4 md:flex">
-        <div className="flex items-center justify-between pb-3">
-          <h2 className="text-sm font-semibold">Chats</h2>
-          <Button variant="outline" size="sm" onClick={newChat} disabled={streaming}>
-            <Plus className="h-4 w-4" />
-            New
-          </Button>
-        </div>
-        <div className="flex-1 space-y-1 overflow-y-auto">
-          {sessions.length === 0 && (
-            <p className="px-2 py-4 text-xs text-muted-foreground">
-              No chats yet — say hello to start your first one.
-            </p>
-          )}
-          {sessions.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              disabled={streaming}
-              onClick={() => loadSession(s.id)}
-              className={cn(
-                "w-full rounded-lg px-3 py-2 text-left transition-colors",
-                s.id === activeSession ? "bg-secondary" : "hover:bg-accent/60",
-                streaming && "cursor-not-allowed opacity-60"
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-medium">
-                  {s.title || s.preview || "Untitled chat"}
-                </span>
-                <span className="shrink-0 text-[10px] text-muted-foreground">
-                  {fmtWhen(s.last_active)}
-                </span>
-              </div>
-              {s.title && s.preview && (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">{s.preview}</p>
-              )}
-            </button>
-          ))}
-        </div>
-      </aside>
-
+    <div
+      className={cn(
+        "flex gap-4",
+        standalone ? "h-screen p-3" : "h-[calc(100vh-3rem)] md:h-[calc(100vh-3.5rem)]"
+      )}
+    >
       {/* Conversation */}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-between border-b pb-4">
@@ -630,7 +658,7 @@ export function ChatView({ agentId }: { agentId: string }) {
                 <MessageSquare className="mx-auto h-8 w-8 text-muted-foreground/40" />
                 <p className="mt-3 text-sm text-muted-foreground">
                   Ask {agentName} anything — it can browse, write, code, and work with files.
-                  Every chat is saved on the left so you can pick up where you left off.
+                  Your chats, workflows, and knowledge live in the panel on the right.
                 </p>
 
                 <button
@@ -780,6 +808,155 @@ export function ChatView({ agentId }: { agentId: string }) {
           </div>
         </form>
       </div>
+
+      {/* Right panel: Chats · Workflows · Knowledge — everything for this agent */}
+      <aside className="hidden w-80 shrink-0 flex-col rounded-xl border md:flex">
+        <div className="flex gap-1 border-b p-2">
+          {[
+            { id: "chats", label: "Chats", icon: MessageSquare },
+            { id: "workflows", label: "Workflows", icon: Zap },
+            { id: "knowledge", label: "Knowledge", icon: BookOpen },
+          ].map((t) => {
+            const Icon = t.icon;
+            const active = panelTab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setPanelTab(t.id as typeof panelTab)}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                  active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-accent/60"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3">
+          {/* Chats */}
+          {panelTab === "chats" && (
+            <div className="space-y-2">
+              <Button variant="outline" size="sm" className="w-full" onClick={newChat} disabled={streaming}>
+                <Plus className="h-4 w-4" />
+                New chat
+              </Button>
+              {sessions.length === 0 ? (
+                <p className="px-1 py-3 text-xs text-muted-foreground">
+                  No chats yet — say hello to start your first one.
+                </p>
+              ) : (
+                sessions.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    disabled={streaming}
+                    onClick={() => loadSession(s.id)}
+                    className={cn(
+                      "w-full rounded-lg px-3 py-2 text-left transition-colors",
+                      s.id === activeSession ? "bg-secondary" : "hover:bg-accent/60",
+                      streaming && "cursor-not-allowed opacity-60"
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium">
+                        {s.title || s.preview || "Untitled chat"}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {fmtWhen(s.last_active)}
+                      </span>
+                    </div>
+                    {s.title && s.preview && (
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{s.preview}</p>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Workflows */}
+          {panelTab === "workflows" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Workflows
+                </h3>
+                <button
+                  type="button"
+                  onClick={refreshWorkflows}
+                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label="Refresh workflows"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {workflows === null ? (
+                <p className="px-1 py-3 text-xs text-muted-foreground">Loading…</p>
+              ) : workflows.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-center">
+                  <Zap className="mx-auto h-6 w-6 text-muted-foreground/40" />
+                  <p className="mt-2 text-sm font-medium">No workflows</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Ask {agentName} in the chat to set one up — it&apos;ll appear here once it&apos;s made.
+                  </p>
+                </div>
+              ) : (
+                workflows.map((w) => (
+                  <Link
+                    key={w.id}
+                    href="/dashboard/automations"
+                    target="_blank"
+                    className="block rounded-lg border p-2.5 transition-colors hover:bg-accent/40"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium">{w.name}</span>
+                      {w.trigger_type === "schedule" ? (
+                        <Clock className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <Webhook className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      {w.tested_at ? (
+                        <span className="flex items-center gap-1 text-green-600">
+                          <CheckCircle2 className="h-3 w-3" /> tested
+                        </span>
+                      ) : (
+                        <span>not tested</span>
+                      )}
+                      {!w.enabled && <span>· paused</span>}
+                      {w.last_status && <span>· last: {w.last_status}</span>}
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Knowledge */}
+          {panelTab === "knowledge" && (
+            <div className="flex h-full flex-col gap-2">
+              <p className="text-xs text-muted-foreground">
+                What {agentName} knows about your company. It uses this in every chat.
+              </p>
+              <textarea
+                value={kb}
+                onChange={(e) => setKb(e.target.value)}
+                placeholder={kbLoaded ? "Tell the agent about your business…" : "Loading…"}
+                disabled={!kbLoaded}
+                className="min-h-[240px] flex-1 resize-none rounded-lg border bg-background p-2 text-xs leading-relaxed focus:border-ring focus:outline-none"
+              />
+              <Button size="sm" onClick={saveKb} disabled={kbSaving || kb === kbSaved || !kbLoaded}>
+                {kbSaving ? "Saving…" : kb === kbSaved ? "Saved" : "Save"}
+              </Button>
+            </div>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
