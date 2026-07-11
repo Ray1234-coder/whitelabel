@@ -712,7 +712,8 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
           <span className="truncate text-sm font-semibold">{agentName}</span>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-2">
+        {/* Fixed top: actions + workspace + workflows (always visible) */}
+        <div className="shrink-0 space-y-3 border-b p-2">
           <Button
             variant="outline"
             size="sm"
@@ -723,54 +724,21 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
             <Plus className="h-4 w-4" /> New chat
           </Button>
 
-          {/* Chats */}
-          <div className="space-y-0.5">
-            <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Chats
-            </p>
-            {sessions.length === 0 ? (
-              <p className="px-2 py-1 text-xs text-muted-foreground">No chats yet</p>
-            ) : (
-              sessions.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  disabled={streaming}
-                  onClick={() => loadSession(s.id)}
-                  className={cn(
-                    "block w-full truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                    s.id === activeSession ? "bg-secondary font-medium" : "text-muted-foreground hover:bg-accent/60",
-                    streaming && "cursor-not-allowed opacity-60"
-                  )}
-                >
-                  {s.title || s.preview || "Untitled chat"}
-                </button>
-              ))
+          <button
+            type="button"
+            onClick={() => setOpenItem({ type: "knowledge" })}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+              openItem?.type === "knowledge"
+                ? "bg-secondary font-medium"
+                : "text-muted-foreground hover:bg-accent/60"
             )}
-          </div>
+          >
+            <BookOpen className="h-4 w-4 shrink-0" /> Knowledge base
+          </button>
 
-          {/* Workspace */}
           <div className="space-y-0.5">
-            <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Workspace
-            </p>
-            <button
-              type="button"
-              onClick={() => setOpenItem({ type: "knowledge" })}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                openItem?.type === "knowledge"
-                  ? "bg-secondary font-medium"
-                  : "text-muted-foreground hover:bg-accent/60"
-              )}
-            >
-              <BookOpen className="h-4 w-4 shrink-0" /> Knowledge base
-            </button>
-          </div>
-
-          {/* Workflows */}
-          <div className="space-y-0.5">
-            <div className="flex items-center justify-between px-2 pb-1">
+            <div className="flex items-center justify-between px-2 pb-0.5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Workflows
               </p>
@@ -793,31 +761,61 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
                 </Link>
               </div>
             </div>
-            {workflows === null ? (
-              <p className="px-2 py-1 text-xs text-muted-foreground">Loading…</p>
-            ) : workflows.length === 0 ? (
-              <p className="px-2 py-1 text-xs text-muted-foreground">No workflows</p>
-            ) : (
-              workflows.map((w, idx) => (
-                <button
-                  key={w.id}
-                  type="button"
-                  onClick={() => setOpenItem({ type: "workflow", id: w.id })}
-                  style={{ animationDelay: `${idx * 40}ms` }}
-                  className={cn(
-                    "flex w-full animate-fade-up items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                    openItem?.type === "workflow" && openItem.id === w.id
-                      ? "bg-secondary font-medium"
-                      : "text-muted-foreground hover:bg-accent/60",
-                    w.id === highlightWorkflowId && "animate-highlight"
-                  )}
-                >
-                  <Zap className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{w.name}</span>
-                </button>
-              ))
-            )}
+            <div className="max-h-44 space-y-0.5 overflow-y-auto">
+              {workflows === null ? (
+                <p className="px-2 py-1 text-xs text-muted-foreground">Loading…</p>
+              ) : workflows.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-muted-foreground">No workflows</p>
+              ) : (
+                workflows.map((w, idx) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => setOpenItem({ type: "workflow", id: w.id })}
+                    style={{ animationDelay: `${idx * 40}ms` }}
+                    className={cn(
+                      "flex w-full animate-fade-up items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                      openItem?.type === "workflow" && openItem.id === w.id
+                        ? "bg-secondary font-medium"
+                        : "text-muted-foreground hover:bg-accent/60",
+                      w.id === highlightWorkflowId && "animate-highlight"
+                    )}
+                  >
+                    <Zap className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{w.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
+        </div>
+
+        {/* Scrollable: chats fill the rest */}
+        <div className="flex-1 overflow-y-auto p-2">
+          <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Chats
+          </p>
+          {sessions.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">No chats yet</p>
+          ) : (
+            sessions.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                disabled={streaming}
+                onClick={() => loadSession(s.id)}
+                className={cn(
+                  "block w-full truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                  s.id === activeSession
+                    ? "bg-secondary font-medium"
+                    : "text-muted-foreground hover:bg-accent/60",
+                  streaming && "cursor-not-allowed opacity-60"
+                )}
+              >
+                {s.title || s.preview || "Untitled chat"}
+              </button>
+            ))
+          )}
         </div>
       </aside>
 
