@@ -31,9 +31,11 @@ export interface Automation {
   name: string;
   instructions: string;
   steps: WorkflowStep[] | null;
-  trigger_type: "schedule" | "webhook";
+  trigger_type: "schedule" | "webhook" | "event";
   cadence: "hourly" | "daily" | "weekly" | null;
   webhook_token: string | null;
+  event_source: string | null;
+  event_filter: string | null;
   enabled: boolean;
   tested_at: string | null;
   next_run_at: string | null;

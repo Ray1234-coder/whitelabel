@@ -35,8 +35,10 @@ export async function POST(request: Request, { params }: Ctx) {
       name?: string;
       instructions?: string;
       steps?: { title?: string; instructions?: string }[];
-      trigger_type?: "schedule" | "webhook";
+      trigger_type?: "schedule" | "webhook" | "event";
       cadence?: Cadence;
+      event_source?: string;
+      event_filter?: string;
     }>(request);
 
     const name = (body.name || "").trim();
@@ -59,8 +61,11 @@ export async function POST(request: Request, { params }: Ctx) {
     if (!name || !instructions || !agentId) {
       throw new ApiError(400, "invalid_request", "name, at least one step, and an agent are required");
     }
-    if (body.trigger_type !== "schedule" && body.trigger_type !== "webhook") {
-      throw new ApiError(400, "invalid_request", "trigger_type must be 'schedule' or 'webhook'");
+    if (!["schedule", "webhook", "event"].includes(body.trigger_type ?? "")) {
+      throw new ApiError(400, "invalid_request", "trigger_type must be 'schedule', 'webhook' or 'event'");
+    }
+    if (body.trigger_type === "event" && !["stripe", "slack"].includes(body.event_source ?? "")) {
+      throw new ApiError(400, "invalid_request", "event_source must be 'stripe' or 'slack'");
     }
 
     // The agent must belong to this workspace (RLS scopes the read to members).
@@ -90,6 +95,9 @@ export async function POST(request: Request, { params }: Ctx) {
       }
       row.cadence = cadence;
       row.next_run_at = nextRunFromNow(cadence, Date.now());
+    } else if (body.trigger_type === "event") {
+      row.event_source = body.event_source;
+      row.event_filter = (body.event_filter || "").trim() || null;
     } else {
       row.webhook_token = randomUUID().replace(/-/g, "");
     }

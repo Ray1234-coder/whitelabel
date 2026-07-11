@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { agent37 } from "@/lib/agent37";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { runEventTriggers } from "@/lib/automations";
 import { DEFAULT_AGENT, SHAPE_PRESETS } from "@/config/agents";
 import { usdToMicros } from "@/lib/format";
 
@@ -37,6 +38,8 @@ export async function POST(request: Request) {
     } else if (event.type === "customer.subscription.deleted") {
       await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
     }
+    // Also fire any workflows the customer set to trigger on this Stripe event.
+    await runEventTriggers("stripe", event.type, JSON.stringify(event.data.object).slice(0, 8000));
   } catch (e) {
     // Log and 500 so Stripe retries transient failures.
     console.error(`[stripe webhook] ${event.type} failed:`, e);

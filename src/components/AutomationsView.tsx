@@ -41,8 +41,10 @@ interface Draft {
   id: string | null;
   name: string;
   agent37_id: string;
-  trigger_type: "schedule" | "webhook";
+  trigger_type: "schedule" | "webhook" | "event";
   cadence: "hourly" | "daily" | "weekly";
+  event_source: string;
+  event_filter: string;
   steps: WorkflowStep[];
 }
 
@@ -52,6 +54,17 @@ const CADENCES = [
   { id: "weekly", label: "Every week" },
 ] as const;
 
+// Common Stripe events, in plain language, for the event-trigger picker.
+const STRIPE_EVENTS = [
+  { id: "", label: "Any Stripe event" },
+  { id: "payment_intent.succeeded", label: "Payment succeeded" },
+  { id: "checkout.session.completed", label: "Checkout completed" },
+  { id: "invoice.paid", label: "Invoice paid" },
+  { id: "invoice.payment_failed", label: "Payment failed" },
+  { id: "customer.subscription.created", label: "New subscription" },
+  { id: "customer.subscription.deleted", label: "Subscription canceled" },
+] as const;
+
 function blankDraft(agentId: string): Draft {
   return {
     id: null,
@@ -59,6 +72,8 @@ function blankDraft(agentId: string): Draft {
     agent37_id: agentId,
     trigger_type: "schedule",
     cadence: "daily",
+    event_source: "stripe",
+    event_filter: "",
     steps: [{ title: "Step 1", instructions: "" }],
   };
 }
@@ -127,6 +142,8 @@ export function AutomationsView() {
       agent37_id: a.agent37_id,
       trigger_type: a.trigger_type,
       cadence: (a.cadence as Draft["cadence"]) || "daily",
+      event_source: a.event_source || "stripe",
+      event_filter: a.event_filter || "",
       steps:
         a.steps && a.steps.length > 0
           ? a.steps.map((s) => ({ title: s.title, instructions: s.instructions }))
@@ -204,6 +221,8 @@ export function AutomationsView() {
               steps: draft.steps,
               trigger_type: draft.trigger_type,
               cadence: draft.trigger_type === "schedule" ? draft.cadence : undefined,
+              event_source: draft.trigger_type === "event" ? draft.event_source : undefined,
+              event_filter: draft.trigger_type === "event" ? draft.event_filter : undefined,
             }),
           }
         );
@@ -382,40 +401,61 @@ export function AutomationsView() {
               Trigger
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => patchDraft({ trigger_type: "schedule" })}
-                className={cn(
-                  "rounded-md border px-2 py-1",
-                  draft.trigger_type === "schedule" ? "border-primary bg-primary/5" : "hover:bg-accent/40"
-                )}
-              >
-                On a schedule
-              </button>
-              <button
-                type="button"
-                onClick={() => patchDraft({ trigger_type: "webhook" })}
-                className={cn(
-                  "rounded-md border px-2 py-1",
-                  draft.trigger_type === "webhook" ? "border-primary bg-primary/5" : "hover:bg-accent/40"
-                )}
-              >
-                On an event (webhook)
-              </button>
-              {draft.trigger_type === "schedule" && (
-                <select
-                  value={draft.cadence}
-                  onChange={(e) => patchDraft({ cadence: e.target.value as Draft["cadence"] })}
-                  className="ml-auto rounded-md border bg-background px-2 py-1"
+              {[
+                { id: "schedule", label: "On a schedule" },
+                { id: "webhook", label: "When a URL is called (forms, Calendly, Typeform, Zapier)" },
+                { id: "event", label: "On a Stripe event" },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => patchDraft({ trigger_type: t.id as Draft["trigger_type"] })}
+                  className={cn(
+                    "rounded-md border px-2 py-1",
+                    draft.trigger_type === t.id ? "border-primary bg-primary/5" : "hover:bg-accent/40"
+                  )}
                 >
-                  {CADENCES.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {draft.trigger_type === "schedule" && (
+              <select
+                value={draft.cadence}
+                onChange={(e) => patchDraft({ cadence: e.target.value as Draft["cadence"] })}
+                className="mt-2 rounded-md border bg-background px-2 py-1 text-xs"
+              >
+                {CADENCES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            )}
+            {draft.trigger_type === "event" && (
+              <div className="mt-2 space-y-1">
+                <select
+                  value={draft.event_filter}
+                  onChange={(e) => patchDraft({ event_source: "stripe", event_filter: e.target.value })}
+                  className="rounded-md border bg-background px-2 py-1 text-xs"
+                >
+                  {STRIPE_EVENTS.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.label}
                     </option>
                   ))}
                 </select>
-              )}
-            </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Runs the moment this happens in your connected Stripe account.
+                </p>
+              </div>
+            )}
+            {draft.trigger_type === "webhook" && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                After you save &amp; test, copy this workflow&apos;s URL (link icon in the list) and paste
+                it into your form / Calendly / Typeform / Zapier &ldquo;webhook&rdquo; setting.
+              </p>
+            )}
           </div>
 
           {/* Step nodes */}

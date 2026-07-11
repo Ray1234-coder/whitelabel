@@ -197,3 +197,32 @@ export async function runAutomation(
   await logRun(db, auto.id, auto.workspace_id, overall, detail);
   return { status: overall, detail, steps: results };
 }
+
+// Fire every enabled, tested workflow subscribed to a provider event (Stripe,
+// Slack, …). Called from the event-receiver routes. Matches by source and, if
+// the workflow set a filter (e.g. a Stripe event type), by that too.
+export async function runEventTriggers(
+  source: string,
+  eventType: string,
+  contextText: string
+): Promise<number> {
+  const db = createAdminClient();
+  const { data } = await db
+    .from("automations")
+    .select("id, event_filter")
+    .eq("trigger_type", "event")
+    .eq("event_source", source)
+    .eq("enabled", true)
+    .not("tested_at", "is", null);
+  const matches = (data ?? []).filter(
+    (a) => !a.event_filter || a.event_filter === eventType
+  );
+  for (const a of matches) {
+    try {
+      await runAutomation(a.id, { mode: "run", contextText });
+    } catch {
+      /* runAutomation logs its own failures */
+    }
+  }
+  return matches.length;
+}
