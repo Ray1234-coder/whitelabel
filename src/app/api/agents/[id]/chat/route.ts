@@ -1,5 +1,6 @@
 import { dataPlaneFetch } from "@/lib/agent37";
 import { getAgentRow, requireMember, requireUser } from "@/lib/auth";
+import { embedTexts, embeddingsConfigured, toVectorLiteral } from "@/lib/embeddings";
 import { ApiError, handleError, readJson } from "@/lib/http";
 import { HOUSE_STYLE, HOUSE_STYLE_SEP } from "@/config/houseStyle";
 import { ONBOARDING_INTAKE } from "@/config/onboarding";
@@ -53,15 +54,38 @@ export async function POST(request: Request, { params }: Ctx) {
     let outgoing = trimmed;
     if (!session_id) {
       const preamble = onboarding ? ONBOARDING_INTAKE : HOUSE_STYLE;
-      // Give the agent the company knowledge base as context, if any.
-      const { data: kb } = await supabase
-        .from("knowledge_base")
-        .select("content")
-        .eq("workspace_id", row.workspace_id)
-        .maybeSingle();
-      const knowledge = (kb?.content || "").trim();
+
+      // Company knowledge as context. RAG path: embed the question and pull only
+      // the most relevant chunks (small + on-point, no token bloat). Fallback:
+      // raw knowledge text, capped, when embeddings aren't set up or fail.
+      let knowledge = "";
+      if (embeddingsConfigured()) {
+        try {
+          const [qvec] = await embedTexts([trimmed]);
+          const { data: chunks } = await supabase.rpc("match_kb_chunks", {
+            p_workspace: row.workspace_id,
+            p_embedding: toVectorLiteral(qvec),
+            p_k: 6,
+          });
+          knowledge = ((chunks as { content: string }[] | null) ?? [])
+            .map((c) => c.content)
+            .join("\n---\n")
+            .trim();
+        } catch (e) {
+          console.error("[chat] RAG retrieval failed, falling back to raw KB:", e);
+        }
+      }
+      if (!knowledge) {
+        const { data: kb } = await supabase
+          .from("knowledge_base")
+          .select("content")
+          .eq("workspace_id", row.workspace_id)
+          .maybeSingle();
+        knowledge = (kb?.content || "").trim().slice(0, 4000);
+      }
+
       const knowledgeBlock = knowledge
-        ? `[What you know about this company — use it to help, keep it private]\n${knowledge.slice(0, 6000)}${HOUSE_STYLE_SEP}`
+        ? `[What you know about this company — use it to help, keep it private]\n${knowledge}${HOUSE_STYLE_SEP}`
         : "";
       outgoing = `${preamble}${HOUSE_STYLE_SEP}${knowledgeBlock}${trimmed}`;
     }

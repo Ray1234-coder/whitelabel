@@ -1,5 +1,9 @@
 import { requireMember, requireUser } from "@/lib/auth";
+import { chunkText, embedTexts, embeddingsConfigured, toVectorLiteral } from "@/lib/embeddings";
 import { ApiError, handleError, json, readJson } from "@/lib/http";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -40,7 +44,30 @@ export async function PUT(request: Request, { params }: Ctx) {
     });
     if (error) throw new ApiError(500, "db_error", error.message);
 
-    return json({ content: text });
+    // Re-index for RAG: chunk + embed + replace this workspace's chunks. Best
+    // effort — if embeddings aren't configured or the call fails, we just fall
+    // back to raw-text injection at chat time, so the save still succeeds.
+    let indexed = 0;
+    if (embeddingsConfigured()) {
+      try {
+        await supabase.from("kb_chunks").delete().eq("workspace_id", workspaceId);
+        const chunks = chunkText(text);
+        if (chunks.length > 0) {
+          const vecs = await embedTexts(chunks);
+          const rows = chunks.map((c, i) => ({
+            workspace_id: workspaceId,
+            content: c,
+            embedding: toVectorLiteral(vecs[i]),
+          }));
+          const { error: insErr } = await supabase.from("kb_chunks").insert(rows);
+          if (!insErr) indexed = rows.length;
+        }
+      } catch (e) {
+        console.error("[knowledge] RAG reindex failed:", e);
+      }
+    }
+
+    return json({ content: text, indexed });
   } catch (e) {
     return handleError(e);
   }
