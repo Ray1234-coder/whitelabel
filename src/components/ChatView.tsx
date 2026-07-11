@@ -241,11 +241,15 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
   const [kbSaved, setKbSaved] = useState("");
   const [kbSaving, setKbSaving] = useState(false);
   const [kbLoaded, setKbLoaded] = useState(false);
+  const [highlightWorkflowId, setHighlightWorkflowId] = useState<string | null>(null);
   const sessionRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
+  // Always points at the latest workflow-detector so send() (memoized) never
+  // calls a stale version with a null workspace.
+  const wfRef = useRef<(text: string) => void>(() => {});
 
   useEffect(() => {
     mountedRef.current = true;
@@ -344,6 +348,7 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
     const controller = new AbortController();
     abortRef.current = controller;
     let failed: string | null = null;
+    let assembled = ""; // full assistant text, for post-stream workflow detection
 
     // Mutate the tool-call list on the in-flight assistant message (the last one).
     const updateTools = (fn: (tools: ToolCall[]) => ToolCall[]) => {
@@ -386,6 +391,7 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
         const delta = deltaText(frame.data);
         if (delta && mountedRef.current) {
           setActivity("");
+          assembled += delta;
           setMessages((m) => {
             const next = [...m];
             const prev = next[next.length - 1];
@@ -398,6 +404,7 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
           const d = JSON.parse(frame.data) as { output_text?: string };
           if (typeof d.output_text === "string" && d.output_text && mountedRef.current) {
             const finalText = d.output_text;
+            assembled = finalText;
             setMessages((m) => {
               const next = [...m];
               next[next.length - 1] = { ...next[next.length - 1], role: "assistant", content: finalText };
@@ -503,6 +510,7 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
         });
       }
       if (isNewSession) refreshSessions();
+      if (assembled && !failed) wfRef.current(assembled);
     } catch (e) {
       if (!controller.signal.aborted && mountedRef.current) {
         toast.error((e as Error).message);
@@ -617,6 +625,67 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
     }
   }
 
+  // If the agent's reply contains a ```workflow {json}``` block, turn it into a
+  // real saved workflow (using the browser's session), then reveal it in the panel.
+  const maybeCreateWorkflow = useCallback(
+    async (text: string) => {
+      if (!workspaceId) return;
+      const m = text.match(/```(?:workflow|json)?\s*(\{[\s\S]*?\})\s*```/i);
+      if (!m) return;
+      let spec: {
+        name?: string;
+        trigger?: string;
+        cadence?: string;
+        steps?: { title?: string; instructions?: string }[];
+      };
+      try {
+        spec = JSON.parse(m[1]);
+      } catch {
+        return;
+      }
+      if (!spec.name || !Array.isArray(spec.steps) || spec.steps.length === 0) return;
+      try {
+        const { automation } = await apiFetch<{ automation: { id: string } }>(
+          `/api/workspaces/${workspaceId}/automations`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              agent37_id: agentId,
+              name: spec.name,
+              steps: spec.steps,
+              trigger_type: spec.trigger === "webhook" ? "webhook" : "schedule",
+              cadence: spec.trigger === "webhook" ? undefined : spec.cadence || "daily",
+            }),
+          }
+        );
+        if (!mountedRef.current) return;
+        // Clean the raw JSON block out of the visible message.
+        setMessages((msgs) => {
+          const next = [...msgs];
+          for (let i = next.length - 1; i >= 0; i--) {
+            if (next[i].role === "assistant" && next[i].content.includes(m[0])) {
+              next[i] = { ...next[i], content: next[i].content.replace(m[0], "").trim() };
+              break;
+            }
+          }
+          return next;
+        });
+        toast.success(`Workflow created: ${spec.name}`);
+        setPanelTab("workflows");
+        setHighlightWorkflowId(automation.id);
+        await refreshWorkflows();
+        setTimeout(() => mountedRef.current && setHighlightWorkflowId(null), 2500);
+      } catch (e) {
+        toast.error(`Couldn't save the workflow: ${(e as Error).message}`);
+      }
+    },
+    [workspaceId, agentId, refreshWorkflows]
+  );
+
+  useEffect(() => {
+    wfRef.current = maybeCreateWorkflow;
+  }, [maybeCreateWorkflow]);
+
   const agentName = agent?.name || "Agent";
   const running = agent?.status === "running" || agent?.status === "sleeping";
 
@@ -654,7 +723,7 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
         <div className="flex-1 space-y-4 overflow-y-auto py-6">
           {messages.length === 0 && !loading && (
             <div className="flex h-full items-center justify-center">
-              <div className="w-full max-w-md text-center">
+              <div className="w-full max-w-md animate-pop text-center">
                 <MessageSquare className="mx-auto h-8 w-8 text-muted-foreground/40" />
                 <p className="mt-3 text-sm text-muted-foreground">
                   Ask {agentName} anything — it can browse, write, code, and work with files.
@@ -700,18 +769,23 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
             </div>
           )}
           {messages.map((m, i) => (
-            <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+            <div
+              key={i}
+              className={cn("animate-fade-up", m.role === "user" ? "flex justify-end" : "flex justify-start")}
+            >
               {m.role === "user" ? (
-                <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+                <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
                   {m.content}
                 </div>
               ) : (
-                <div className="max-w-[85%] rounded-2xl rounded-bl-md border bg-muted/40 px-4 py-2.5 text-sm leading-relaxed">
+                <div className="max-w-[85%] rounded-2xl rounded-bl-md border bg-muted/40 px-4 py-2.5 text-sm leading-relaxed shadow-sm">
                   {m.tools && m.tools.length > 0 && <ToolList tools={m.tools} />}
                   {m.content ? (
-                    <Markdown content={m.content} />
+                    <div className={cn(streaming && i === messages.length - 1 && "stream-caret")}>
+                      <Markdown content={m.content} />
+                    </div>
                   ) : streaming && i === messages.length - 1 && !m.tools?.length ? (
-                    "…"
+                    <span className="shimmer inline-block h-4 w-24 rounded" />
                   ) : (
                     ""
                   )}
@@ -836,7 +910,7 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
           })}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3">
+        <div key={panelTab} className="flex-1 animate-fade-in overflow-y-auto p-3">
           {/* Chats */}
           {panelTab === "chats" && (
             <div className="space-y-2">
@@ -905,12 +979,16 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
                   </p>
                 </div>
               ) : (
-                workflows.map((w) => (
+                workflows.map((w, idx) => (
                   <Link
                     key={w.id}
                     href="/dashboard/automations"
                     target="_blank"
-                    className="block rounded-lg border p-2.5 transition-colors hover:bg-accent/40"
+                    style={{ animationDelay: `${idx * 45}ms` }}
+                    className={cn(
+                      "block animate-fade-up rounded-lg border p-2.5 transition-colors hover:bg-accent/40",
+                      w.id === highlightWorkflowId && "animate-highlight border-primary"
+                    )}
                   >
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium">{w.name}</span>
