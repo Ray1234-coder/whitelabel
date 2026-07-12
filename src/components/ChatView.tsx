@@ -248,6 +248,10 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
   const [highlightWorkflowId, setHighlightWorkflowId] = useState<string | null>(null);
   const sessionRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Whether the user is pinned near the bottom. If they've scrolled up to read,
+  // we stop auto-following the stream so their scroll position is left alone.
+  const nearBottomRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
@@ -264,8 +268,18 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Only auto-follow when the user is already near the bottom — never yank
+    // them down if they've scrolled up to read while the agent is typing.
+    if (nearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, activity]);
+
+  function onMessagesScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -834,7 +848,7 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
           </Button>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto py-6">
+        <div ref={scrollRef} onScroll={onMessagesScroll} className="flex-1 space-y-4 overflow-y-auto py-6">
           {messages.length === 0 && !loading && (
             <div className="flex h-full items-center justify-center">
               <div className="w-full max-w-md animate-pop text-center">
