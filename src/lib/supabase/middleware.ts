@@ -39,9 +39,11 @@ export async function updateSession(request: NextRequest) {
     // the route verifies the Stripe signature itself.
     pathname.startsWith("/api/stripe") ||
     // Automation entry points also have no session: inbound webhooks are
-    // guarded by their unguessable token, the cron endpoint by CRON_SECRET.
+    // guarded by their unguessable token, the cron endpoint by CRON_SECRET,
+    // and provider event receivers (Slack) by their signing secret.
     pathname.startsWith("/api/hooks") ||
-    pathname.startsWith("/api/cron");
+    pathname.startsWith("/api/cron") ||
+    pathname.startsWith("/api/events");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

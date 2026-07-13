@@ -54,16 +54,30 @@ const CADENCES = [
   { id: "weekly", label: "Every week" },
 ] as const;
 
-// Common Stripe events, in plain language, for the event-trigger picker.
-const STRIPE_EVENTS = [
-  { id: "", label: "Any Stripe event" },
-  { id: "payment_intent.succeeded", label: "Payment succeeded" },
-  { id: "checkout.session.completed", label: "Checkout completed" },
-  { id: "invoice.paid", label: "Invoice paid" },
-  { id: "invoice.payment_failed", label: "Payment failed" },
-  { id: "customer.subscription.created", label: "New subscription" },
-  { id: "customer.subscription.deleted", label: "Subscription canceled" },
+// Provider events, in plain language, for the event-trigger picker.
+const EVENT_SOURCES = [
+  { id: "stripe", label: "Stripe" },
+  { id: "slack", label: "Slack" },
 ] as const;
+
+const PROVIDER_EVENTS: Record<string, { id: string; label: string }[]> = {
+  stripe: [
+    { id: "", label: "Any Stripe event" },
+    { id: "payment_intent.succeeded", label: "Payment succeeded" },
+    { id: "checkout.session.completed", label: "Checkout completed" },
+    { id: "invoice.paid", label: "Invoice paid" },
+    { id: "invoice.payment_failed", label: "Payment failed" },
+    { id: "customer.subscription.created", label: "New subscription" },
+    { id: "customer.subscription.deleted", label: "Subscription canceled" },
+  ],
+  slack: [
+    { id: "", label: "Any Slack event" },
+    { id: "message", label: "New message in a channel" },
+    { id: "app_mention", label: "Someone mentions the app" },
+    { id: "reaction_added", label: "Reaction added" },
+    { id: "member_joined_channel", label: "Someone joins a channel" },
+  ],
+};
 
 function blankDraft(agentId: string): Draft {
   return {
@@ -404,7 +418,7 @@ export function AutomationsView() {
               {[
                 { id: "schedule", label: "On a schedule" },
                 { id: "webhook", label: "When a URL is called (forms, Calendly, Typeform, Zapier)" },
-                { id: "event", label: "On a Stripe event" },
+                { id: "event", label: "On an app event (Stripe, Slack)" },
               ].map((t) => (
                 <button
                   key={t.id}
@@ -434,19 +448,36 @@ export function AutomationsView() {
             )}
             {draft.trigger_type === "event" && (
               <div className="mt-2 space-y-1">
-                <select
-                  value={draft.event_filter}
-                  onChange={(e) => patchDraft({ event_source: "stripe", event_filter: e.target.value })}
-                  className="rounded-md border bg-background px-2 py-1 text-xs"
-                >
-                  {STRIPE_EVENTS.map((ev) => (
-                    <option key={ev.id} value={ev.id}>
-                      {ev.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={draft.event_source}
+                    onChange={(e) => patchDraft({ event_source: e.target.value, event_filter: "" })}
+                    className="rounded-md border bg-background px-2 py-1 text-xs"
+                    aria-label="App"
+                  >
+                    {EVENT_SOURCES.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={draft.event_filter}
+                    onChange={(e) => patchDraft({ event_filter: e.target.value })}
+                    className="rounded-md border bg-background px-2 py-1 text-xs"
+                    aria-label="Which event"
+                  >
+                    {(PROVIDER_EVENTS[draft.event_source] ?? PROVIDER_EVENTS.stripe).map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Runs the moment this happens in your connected Stripe account.
+                  {draft.event_source === "slack"
+                    ? "Runs the moment this happens in your Slack workspace (needs the Slack app connected — ask your admin)."
+                    : "Runs the moment this happens in your connected Stripe account."}
                 </p>
               </div>
             )}
