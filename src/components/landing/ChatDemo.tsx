@@ -45,7 +45,7 @@ export function ChatDemo() {
       {typed && (
         <div className="ml-auto w-fit max-w-[80%] rounded-lg bg-indigo-600 px-3 py-2 text-white">
           {typed}
-          {phase === 0 && <span className="stream-caret" />}
+          {phase === 0 && <span className="stream-caret caret-light" />}
         </div>
       )}
       {phase === 1 && (

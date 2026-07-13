@@ -204,7 +204,15 @@
 }
 .hero-word {
   display: inline-block;
+  /* room for descenders so the blur/transform never clips them */
+  padding-bottom: 0.1em;
+  margin-bottom: -0.1em;
   animation: wordUp 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Light caret for typing inside the indigo user bubble */
+.caret-light.stream-caret::after {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* Animated gradient on accent text */
@@ -219,6 +227,10 @@
   background-clip: text;
   color: transparent;
   animation: gradientPan 5s ease-in-out infinite;
+  /* background-clip:text only paints inside the box — pad it so
+     descenders (g, y, p) aren't cut off, offset with negative margin */
+  padding-bottom: 0.15em;
+  margin-bottom: -0.15em;
 }
 
 /* Mockup: tilt-in entrance, then gentle float */

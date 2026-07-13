@@ -24,7 +24,7 @@ function StaggeredHeadline() {
   const words = ["Your", "work,"];
   const accent = ["running", "itself."];
   return (
-    <h1 className="mx-auto mt-5 max-w-3xl text-5xl font-semibold tracking-tight md:text-6xl">
+    <h1 className="mx-auto mt-5 max-w-3xl text-5xl font-semibold leading-[1.12] tracking-tight md:text-6xl md:leading-[1.1]">
       {words.map((w, i) => (
         <span key={w} className="hero-word" style={{ animationDelay: `${0.15 + i * 0.09}s` }}>
           {w}&nbsp;
