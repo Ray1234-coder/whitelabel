@@ -269,20 +269,26 @@ export async function runAutomation(
 
 // Fire every enabled, tested workflow subscribed to a provider event (Stripe,
 // Slack, …). Called from the event-receiver routes. Matches by source and, if
-// the workflow set a filter (e.g. a Stripe event type), by that too.
+// the workflow set a filter (e.g. a Stripe event type), by that too. Pass
+// workspaceId to scope delivery to one tenant (Stripe Connect events); omitting
+// it broadcasts — only appropriate for single-tenant sources like the one
+// admin-owned Slack app.
 export async function runEventTriggers(
   source: string,
   eventType: string,
-  contextText: string
+  contextText: string,
+  workspaceId?: string
 ): Promise<number> {
   const db = createAdminClient();
-  const { data } = await db
+  let query = db
     .from("automations")
     .select("id, event_filter")
     .eq("trigger_type", "event")
     .eq("event_source", source)
     .eq("enabled", true)
     .not("tested_at", "is", null);
+  if (workspaceId) query = query.eq("workspace_id", workspaceId);
+  const { data } = await query;
   const matches = (data ?? []).filter(
     (a) => !a.event_filter || a.event_filter === eventType
   );

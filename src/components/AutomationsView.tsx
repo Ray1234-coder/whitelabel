@@ -48,6 +48,7 @@ interface Draft {
   cadence: "hourly" | "daily" | "weekly";
   event_source: string;
   event_filter: string;
+  webhook_token: string | null;
   steps: WorkflowNode[];
 }
 
@@ -101,6 +102,7 @@ function blankDraft(agentId: string): Draft {
     cadence: "daily",
     event_source: "stripe",
     event_filter: "",
+    webhook_token: null,
     steps: [{ title: "Step 1", instructions: "" }],
   };
 }
@@ -131,6 +133,36 @@ export function AutomationsView() {
   const [testing, setTesting] = useState(false);
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<StepResult[] | null>(null);
+  const [stripeConn, setStripeConn] = useState<{ available: boolean; connected: boolean; account: string | null } | null>(null);
+
+  // One-time toast when returning from the Stripe connect flow.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("stripe");
+    if (!q) return;
+    if (q === "connected") toast.success("Stripe connected — your workflows can now react to your payments.");
+    else if (q === "unavailable") toast.error("Stripe connections aren't switched on yet — ask your admin.");
+    else if (q === "denied") toast("Stripe connection was canceled.");
+    else toast.error("Stripe connection didn't complete — try again.");
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
+
+  const refreshStripeConn = useCallback(async () => {
+    if (!current) return;
+    try {
+      const d = await apiFetch<{ available: boolean; connected: boolean; account: string | null }>(
+        `/api/workspaces/${current.id}/stripe/connection`
+      );
+      setStripeConn(d);
+    } catch {
+      /* builder works without it */
+    }
+  }, [current]);
+
+  useEffect(() => {
+    if (draft?.trigger_type === "event" && draft.event_source === "stripe" && stripeConn === null) {
+      refreshStripeConn();
+    }
+  }, [draft?.trigger_type, draft?.event_source, stripeConn, refreshStripeConn]);
 
   const load = useCallback(async () => {
     if (!current) return;
@@ -171,6 +203,7 @@ export function AutomationsView() {
       cadence: (a.cadence as Draft["cadence"]) || "daily",
       event_source: a.event_source || "stripe",
       event_filter: a.event_filter || "",
+      webhook_token: a.webhook_token,
       steps:
         a.steps && a.steps.length > 0
           ? (JSON.parse(JSON.stringify(a.steps)) as WorkflowNode[])
@@ -327,7 +360,7 @@ export function AutomationsView() {
             }),
           }
         );
-        setDraft((d) => (d ? { ...d, id: automation.id } : d));
+        setDraft((d) => (d ? { ...d, id: automation.id, webhook_token: automation.webhook_token } : d));
         setDirty(false);
         setTested(false);
         await load();
@@ -504,7 +537,7 @@ export function AutomationsView() {
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               {[
                 { id: "schedule", label: "On a schedule" },
-                { id: "webhook", label: "When a URL is called (forms, Calendly, Typeform, Zapier)" },
+                { id: "webhook", label: "With a start link (forms, Calendly, bookings)" },
                 { id: "event", label: "On an app event (Stripe, Slack)" },
               ].map((t) => (
                 <button
@@ -564,15 +597,63 @@ export function AutomationsView() {
                 <p className="text-[11px] text-muted-foreground">
                   {draft.event_source === "slack"
                     ? "Runs the moment this happens in your Slack workspace (needs the Slack app connected — ask your admin)."
-                    : "Runs the moment this happens in your connected Stripe account."}
+                    : "Runs the moment this happens in your own Stripe account."}
                 </p>
+                {draft.event_source === "stripe" && stripeConn && !stripeConn.connected && (
+                  <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-amber-300/60 bg-amber-500/5 p-2">
+                    <p className="text-[11px]">
+                      {stripeConn.available
+                        ? "Connect your Stripe account — one click, sign in, approve. Done."
+                        : "Stripe connections aren't switched on yet — ask your admin to finish the one-time setup."}
+                    </p>
+                    {stripeConn.available && current && (
+                      <a
+                        href={`/api/workspaces/${current.id}/stripe/connect`}
+                        className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:opacity-90"
+                      >
+                        Connect Stripe
+                      </a>
+                    )}
+                  </div>
+                )}
+                {draft.event_source === "stripe" && stripeConn?.connected && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-green-600">
+                    <CheckCircle2 className="h-3 w-3" /> Stripe connected
+                    <span className="text-muted-foreground">({stripeConn.account})</span>
+                  </p>
+                )}
               </div>
             )}
             {draft.trigger_type === "webhook" && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                After you save &amp; test, copy this workflow&apos;s URL (link icon in the list) and paste
-                it into your form / Calendly / Typeform / Zapier &ldquo;webhook&rdquo; setting.
-              </p>
+              <div className="mt-2 space-y-1.5 rounded-lg border bg-muted/30 p-2.5">
+                <p className="text-xs">
+                  Your workflow gets its own <span className="font-semibold">start link</span> — when
+                  another tool calls that link, this workflow runs. No coding needed.
+                </p>
+                {draft.webhook_token ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/api/hooks/${draft.webhook_token}`);
+                      toast.success("Start link copied");
+                    }}
+                    className="flex w-full items-center gap-1.5 rounded-md border bg-background px-2 py-1.5 font-mono text-[11px] text-muted-foreground hover:bg-accent/50"
+                  >
+                    <Copy className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{`${typeof window !== "undefined" ? window.location.origin : ""}/api/hooks/${draft.webhook_token}`}</span>
+                  </button>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Save the workflow and your start link appears here.</p>
+                )}
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Where to paste it — <span className="font-medium">Calendly:</span> Integrations → Webhooks ·{" "}
+                  <span className="font-medium">Typeform:</span> Connect → Webhooks ·{" "}
+                  <span className="font-medium">Zapier:</span> a &ldquo;Webhooks&rdquo; action ·{" "}
+                  <span className="font-medium">Website form:</span> ask whoever runs your site to send
+                  submissions to this link. (Tools call this a &ldquo;webhook&rdquo; — same thing.)
+                  Remember to Test the workflow first — the link only works after a passing test.
+                </p>
+              </div>
             )}
           </div>
 
@@ -830,10 +911,10 @@ export function AutomationsView() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label="Copy webhook URL"
+                      aria-label="Copy start link"
                       onClick={() => {
                         navigator.clipboard.writeText(`${window.location.origin}/api/hooks/${a.webhook_token}`);
-                        toast.success("Webhook URL copied");
+                        toast.success("Start link copied");
                       }}
                     >
                       <Copy className="h-4 w-4" />
