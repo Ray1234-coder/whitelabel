@@ -18,6 +18,31 @@ import { branding } from "@/config/branding";
 import { CountUp } from "@/components/landing/CountUp";
 import { LeadForm } from "@/components/landing/LeadForm";
 import { Reveal } from "@/components/landing/Reveal";
+import { ChatDemo } from "@/components/landing/ChatDemo";
+
+function StaggeredHeadline() {
+  const words = ["Your", "work,"];
+  const accent = ["running", "itself."];
+  return (
+    <h1 className="mx-auto mt-5 max-w-3xl text-5xl font-semibold tracking-tight md:text-6xl">
+      {words.map((w, i) => (
+        <span key={w} className="hero-word" style={{ animationDelay: `${0.15 + i * 0.09}s` }}>
+          {w}&nbsp;
+        </span>
+      ))}
+      {accent.map((w, i) => (
+        <span
+          key={w}
+          className="hero-word gradient-text"
+          style={{ animationDelay: `${0.15 + (words.length + i) * 0.09}s` }}
+        >
+          {w}
+          {i < accent.length - 1 ? " " : ""}
+        </span>
+      ))}
+    </h1>
+  );
+}
 
 const PAIN_FIX = [
   {
@@ -128,7 +153,7 @@ export default async function Home() {
             </Link>
             <Link
               href="/login"
-              className="hidden rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 sm:block"
+              className="btn-shine hidden rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 sm:block"
             >
               Get started
             </Link>
@@ -143,12 +168,14 @@ export default async function Home() {
             aria-hidden
             className="glow-drift pointer-events-none absolute left-1/2 top-40 h-[600px] w-[900px] -translate-x-1/2 rounded-full bg-indigo-600/[0.04] blur-3xl"
           />
+          <div
+            aria-hidden
+            className="blob-drift pointer-events-none absolute right-[10%] top-24 h-[400px] w-[400px] rounded-full bg-violet-500/[0.05] blur-3xl"
+          />
           <p className="hero-enter text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600">
             AI agents for every workflow
           </p>
-          <h1 className="hero-enter hero-delay-1 mx-auto mt-5 max-w-3xl text-5xl font-semibold tracking-tight md:text-6xl">
-            Your work, running itself.
-          </h1>
+          <StaggeredHeadline />
           <p className="hero-enter hero-delay-2 mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-zinc-600">
             {branding.appName} provisions a team of AI agents for your company — trained on your
             processes, working around the clock, and one chat away when you need them.
@@ -156,7 +183,7 @@ export default async function Home() {
           <div className="hero-enter hero-delay-3 mt-8 flex items-center justify-center gap-3">
             <Link
               href="/login"
-              className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+              className="btn-shine rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-indigo-700 hover:shadow-[0_4px_16px_rgba(79,70,229,0.35)]"
             >
               Get your agents
             </Link>
@@ -169,7 +196,8 @@ export default async function Home() {
           </div>
 
           {/* Product mockup */}
-          <div className="hero-enter hero-delay-4 relative mx-auto mt-16 max-w-4xl rounded-xl border border-zinc-200 bg-white text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-shadow duration-500 hover:shadow-[0_8px_32px_rgba(79,70,229,0.08)]">
+          <div className="mockup-enter mx-auto mt-16 max-w-4xl">
+          <div className="mockup-float relative rounded-xl border border-zinc-200 bg-white text-left shadow-[0_12px_40px_rgba(79,70,229,0.08)] transition-shadow duration-500 hover:shadow-[0_16px_48px_rgba(79,70,229,0.14)]">
             <div className="flex items-center gap-1.5 border-b border-zinc-100 px-4 py-3">
               <span className="h-2.5 w-2.5 rounded-full bg-zinc-200" />
               <span className="h-2.5 w-2.5 rounded-full bg-zinc-200" />
@@ -192,21 +220,10 @@ export default async function Home() {
                     running
                   </span>
                 </div>
-                <div className="mt-4 space-y-3 text-sm">
-                  <div className="bubble-enter bubble-delay-1 ml-auto w-fit max-w-[80%] rounded-lg bg-indigo-600 px-3 py-2 text-white">
-                    How many invoices are still waiting on approval?
-                  </div>
-                  <div className="bubble-enter bubble-delay-2 w-fit max-w-[85%] rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-zinc-700">
-                    3 invoices are pending — two are waiting on legal review, one needs a PO
-                    match. I&apos;ve nudged the approvers and flagged the mismatch for you.
-                  </div>
-                  <div className="bubble-enter bubble-delay-3 flex items-center gap-2 text-xs text-zinc-400">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600" />
-                    Reconciled 214 invoices today
-                  </div>
-                </div>
+                <ChatDemo />
               </div>
             </div>
+          </div>
           </div>
         </section>
 
@@ -222,7 +239,7 @@ export default async function Home() {
               </p>
             </Reveal>
             <div className="mt-12 grid gap-6 md:grid-cols-2">
-              <Reveal className="lift rounded-xl border border-zinc-200 p-8">
+              <Reveal className="lift reveal-left rounded-xl border border-zinc-200 p-8">
                 <p className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
                   Without {branding.appName}
                 </p>
@@ -235,7 +252,7 @@ export default async function Home() {
                   ))}
                 </ul>
               </Reveal>
-              <Reveal delay={120} className="lift rounded-xl border border-indigo-100 bg-indigo-50/40 p-8">
+              <Reveal delay={120} className="lift reveal-right rounded-xl border border-indigo-100 bg-indigo-50/40 p-8">
                 <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600">
                   With {branding.appName}
                 </p>
@@ -261,20 +278,20 @@ export default async function Home() {
               </h2>
             </Reveal>
             <div className="mt-14 grid gap-12 sm:grid-cols-3">
-              <Reveal>
-                <p className="text-6xl font-semibold tracking-tight text-indigo-600">
+              <Reveal className="reveal-scale">
+                <p className="gradient-text text-6xl font-semibold tracking-tight">
                   <CountUp value={31} suffix=" hrs" />
                 </p>
                 <p className="mt-3 text-sm text-zinc-600">saved per employee, every month</p>
               </Reveal>
-              <Reveal delay={120}>
-                <p className="text-6xl font-semibold tracking-tight text-indigo-600">
+              <Reveal delay={140} className="reveal-scale">
+                <p className="gradient-text text-6xl font-semibold tracking-tight">
                   <CountUp value={87} suffix="%" />
                 </p>
                 <p className="mt-3 text-sm text-zinc-600">of routine workflows fully automated</p>
               </Reveal>
-              <Reveal delay={240}>
-                <p className="text-6xl font-semibold tracking-tight text-indigo-600">
+              <Reveal delay={280} className="reveal-scale">
+                <p className="gradient-text text-6xl font-semibold tracking-tight">
                   <CountUp value={4} suffix=" min" />
                 </p>
                 <p className="mt-3 text-sm text-zinc-600">median time from request to done</p>
@@ -367,15 +384,17 @@ export default async function Home() {
         <section id="customers" className="border-t border-zinc-100 px-6 py-20">
           <Reveal className="mx-auto max-w-6xl text-center">
             <p className="text-sm font-medium text-zinc-400">Teams that run on {branding.appName}</p>
-            <div className="mt-8 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
-              {LOGOS.map((logo) => (
-                <span
-                  key={logo}
-                  className="text-sm font-semibold tracking-wide text-zinc-300 transition-colors duration-300 hover:text-zinc-500"
-                >
-                  {logo}
-                </span>
-              ))}
+            <div className="marquee mt-8">
+              <div className="marquee-track">
+                {[...LOGOS, ...LOGOS].map((logo, i) => (
+                  <span
+                    key={`${logo}-${i}`}
+                    className="mx-8 whitespace-nowrap text-sm font-semibold tracking-wide text-zinc-300 transition-colors duration-300 hover:text-zinc-500"
+                  >
+                    {logo}
+                  </span>
+                ))}
+              </div>
             </div>
           </Reveal>
         </section>
