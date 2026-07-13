@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || url.origin;
-  const back = (q: string) => Response.redirect(`${origin}/dashboard/automations?stripe=${q}`, 302);
+  const back = (q: string) => Response.redirect(`${origin}/dashboard?stripe=${q}`, 302);
 
   try {
     if (!stripeConfigured()) return back("unavailable");

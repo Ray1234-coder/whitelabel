@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: Ctx) {
     const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || new URL(request.url).origin;
     const clientId = process.env.STRIPE_CONNECT_CLIENT_ID;
     if (!clientId) {
-      return Response.redirect(`${origin}/dashboard/automations?stripe=unavailable`, 302);
+      return Response.redirect(`${origin}/dashboard?stripe=unavailable`, 302);
     }
 
     const state = signState(workspaceId, Date.now() + 15 * 60 * 1000);

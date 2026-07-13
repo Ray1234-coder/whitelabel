@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CreditCard, LayoutGrid, LogOut, Settings, Users } from "lucide-react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { branding } from "@/config/branding";
 import { useWorkspace } from "@/components/WorkspaceProvider";
@@ -22,6 +24,18 @@ const NAV = [
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { userEmail } = useWorkspace();
+
+  // One-time toast when returning from the Stripe connect flow (the OAuth
+  // callback redirects to /dashboard?stripe=...).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("stripe");
+    if (!q) return;
+    if (q === "connected") toast.success("Stripe connected — your workflows can now react to your payments.");
+    else if (q === "unavailable") toast.error("Stripe connections aren't switched on yet — ask your admin.");
+    else if (q === "denied") toast("Stripe connection was canceled.");
+    else toast.error("Stripe connection didn't complete — try again.");
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
 
   async function signOut() {
     await createClient().auth.signOut();

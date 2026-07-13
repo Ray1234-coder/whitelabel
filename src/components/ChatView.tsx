@@ -27,6 +27,7 @@ import { apiFetch } from "@/lib/api";
 import { stripHouseStyle } from "@/config/houseStyle";
 import { isSplitNode, type AgentRow, type Automation, type WorkflowNode } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { WorkflowBuilder } from "@/components/WorkflowBuilder";
 import { cn } from "@/lib/utils";
 
 interface ToolCall {
@@ -238,7 +239,10 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
   // What's open in the right panel (Claude-style): a workflow, the knowledge
   // base, or nothing (chat is full-width).
   const [openItem, setOpenItem] = useState<
-    { type: "workflow"; id: string } | { type: "knowledge" } | null
+    | { type: "workflow"; id: string }
+    | { type: "builder"; id: string | null } // workflow editor: null = new workflow
+    | { type: "knowledge" }
+    | null
   >(null);
   const [workflows, setWorkflows] = useState<Automation[] | null>(null);
   const [kb, setKb] = useState("");
@@ -765,14 +769,17 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </button>
-                <Link
-                  href="/dashboard/automations"
-                  target="_blank"
-                  className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                <button
+                  type="button"
+                  onClick={() => setOpenItem({ type: "builder", id: null })}
+                  className={cn(
+                    "rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground",
+                    openItem?.type === "builder" && openItem.id === null && "bg-accent text-foreground"
+                  )}
                   aria-label="New workflow"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                </Link>
+                </button>
               </div>
             </div>
             <div className="max-h-44 space-y-0.5 overflow-y-auto">
@@ -1017,15 +1024,19 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
         <aside className="hidden w-[26rem] shrink-0 animate-fade-in flex-col border-l bg-muted/10 md:flex">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="flex min-w-0 items-center gap-2">
-              {openItem.type === "workflow" ? (
-                <Zap className="h-4 w-4 shrink-0 text-primary" />
-              ) : (
+              {openItem.type === "knowledge" ? (
                 <BookOpen className="h-4 w-4 shrink-0 text-primary" />
+              ) : (
+                <Zap className="h-4 w-4 shrink-0 text-primary" />
               )}
               <span className="truncate text-sm font-semibold">
                 {openItem.type === "workflow"
                   ? (workflows ?? []).find((w) => w.id === openItem.id)?.name ?? "Workflow"
-                  : "Knowledge base"}
+                  : openItem.type === "builder"
+                    ? openItem.id
+                      ? `Edit: ${(workflows ?? []).find((w) => w.id === openItem.id)?.name ?? "workflow"}`
+                      : "New workflow"
+                    : "Knowledge base"}
               </span>
             </div>
             <button
@@ -1055,6 +1066,24 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
                   {kbSaving ? "Saving…" : kb === kbSaved ? "Saved" : "Save"}
                 </Button>
               </div>
+            ) : openItem.type === "builder" ? (
+              workspaceId ? (
+                <WorkflowBuilder
+                  workspaceId={workspaceId}
+                  agentId={agentId}
+                  automation={
+                    openItem.id ? ((workflows ?? []).find((w) => w.id === openItem.id) ?? null) : null
+                  }
+                  onSaved={(id) => {
+                    refreshWorkflows();
+                    setOpenItem({ type: "builder", id });
+                    setHighlightWorkflowId(id);
+                    setTimeout(() => mountedRef.current && setHighlightWorkflowId(null), 2500);
+                  }}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              )
             ) : (
               (() => {
                 const wf = (workflows ?? []).find((w) => w.id === openItem.id);
@@ -1165,13 +1194,13 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
                       <span className="text-muted-foreground">
                         {wf.tested_at ? "Tested · ready to run" : "Not tested yet"}
                       </span>
-                      <Link
-                        href="/dashboard/automations"
-                        target="_blank"
+                      <button
+                        type="button"
+                        onClick={() => setOpenItem({ type: "builder", id: wf.id })}
                         className="font-medium text-primary underline underline-offset-2"
                       >
-                        Open in builder
-                      </Link>
+                        Edit workflow
+                      </button>
                     </div>
                   </div>
                 );
