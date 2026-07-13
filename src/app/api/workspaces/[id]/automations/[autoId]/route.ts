@@ -1,5 +1,6 @@
 import { requireMember, requireUser } from "@/lib/auth";
 import { ApiError, handleError, json, readJson } from "@/lib/http";
+import { normalizeNodes, summarizeNodes } from "@/lib/workflowNodes";
 
 type Ctx = { params: Promise<{ id: string; autoId: string }> };
 
@@ -13,7 +14,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
     const body = await readJson<{
       enabled?: boolean;
       name?: string;
-      steps?: { title?: string; instructions?: string }[];
+      steps?: unknown;
     }>(request);
     const patch: Record<string, unknown> = {};
     if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
@@ -21,17 +22,12 @@ export async function PATCH(request: Request, { params }: Ctx) {
 
     // Editing the steps invalidates the previous test — must re-test before running.
     if (Array.isArray(body.steps)) {
-      const cleanSteps = body.steps
-        .map((s, i) => ({
-          title: (s.title || `Step ${i + 1}`).trim(),
-          instructions: (s.instructions || "").trim(),
-        }))
-        .filter((s) => s.instructions);
+      const cleanSteps = normalizeNodes(body.steps);
       if (cleanSteps.length === 0) {
         throw new ApiError(400, "invalid_request", "a workflow needs at least one step");
       }
       patch.steps = cleanSteps;
-      patch.instructions = cleanSteps.map((s, i) => `${i + 1}. ${s.title}`).join("\n");
+      patch.instructions = summarizeNodes(cleanSteps);
       patch.tested_at = null;
     }
 

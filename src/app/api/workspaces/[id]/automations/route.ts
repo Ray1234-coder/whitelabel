@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { requireMember, requireUser } from "@/lib/auth";
 import { CADENCE_MS, nextRunFromNow, type Cadence } from "@/lib/automations";
 import { ApiError, handleError, json, readJson } from "@/lib/http";
+import { normalizeNodes, summarizeNodes } from "@/lib/workflowNodes";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -34,7 +35,7 @@ export async function POST(request: Request, { params }: Ctx) {
       agent37_id?: string;
       name?: string;
       instructions?: string;
-      steps?: { title?: string; instructions?: string }[];
+      steps?: unknown;
       trigger_type?: "schedule" | "webhook" | "event";
       cadence?: Cadence;
       event_source?: string;
@@ -44,19 +45,11 @@ export async function POST(request: Request, { params }: Ctx) {
     const name = (body.name || "").trim();
     const agentId = body.agent37_id;
 
-    // Normalize steps (the mapped workflow). Fall back to a single instruction.
-    const cleanSteps = Array.isArray(body.steps)
-      ? body.steps
-          .map((s, i) => ({
-            title: (s.title || `Step ${i + 1}`).trim(),
-            instructions: (s.instructions || "").trim(),
-          }))
-          .filter((s) => s.instructions)
-      : [];
+    // Normalize nodes (plain steps and parallel splits). Fall back to a single
+    // instruction for agent-created flat workflows.
+    const cleanSteps = normalizeNodes(body.steps);
     const instructions =
-      cleanSteps.length > 0
-        ? cleanSteps.map((s, i) => `${i + 1}. ${s.title}`).join("\n")
-        : (body.instructions || "").trim();
+      cleanSteps.length > 0 ? summarizeNodes(cleanSteps) : (body.instructions || "").trim();
 
     if (!name || !instructions || !agentId) {
       throw new ApiError(400, "invalid_request", "name, at least one step, and an agent are required");

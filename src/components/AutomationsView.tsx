@@ -10,6 +10,7 @@ import {
   FlaskConical,
   Play,
   Plus,
+  Split,
   Trash2,
   Webhook,
   Zap,
@@ -20,14 +21,16 @@ import { toast } from "sonner";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch } from "@/lib/api";
 import { WORKFLOW_RUNS_PER_DAY } from "@/config/agents";
-import type { Automation, MergedAgent, WorkflowStep } from "@/lib/types";
+import { isSplitNode, type Automation, type MergedAgent, type WorkflowNode, type WorkflowStep } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface StepResult {
+  key: string;
   title: string;
+  branch?: string;
   status: "ok" | "error" | "skipped";
   output: string;
 }
@@ -45,8 +48,18 @@ interface Draft {
   cadence: "hourly" | "daily" | "weekly";
   event_source: string;
   event_filter: string;
-  steps: WorkflowStep[];
+  steps: WorkflowNode[];
 }
+
+// Soft accent palette (sim-style): mostly-white cards, one colorful chip each.
+const HUES = [
+  { chip: "bg-blue-500/10 text-blue-600", ring: "ring-blue-200" },
+  { chip: "bg-amber-500/10 text-amber-600", ring: "ring-amber-200" },
+  { chip: "bg-emerald-500/10 text-emerald-600", ring: "ring-emerald-200" },
+  { chip: "bg-rose-500/10 text-rose-600", ring: "ring-rose-200" },
+  { chip: "bg-violet-500/10 text-violet-600", ring: "ring-violet-200" },
+] as const;
+const hue = (i: number) => HUES[i % HUES.length];
 
 const CADENCES = [
   { id: "hourly", label: "Every hour" },
@@ -160,7 +173,7 @@ export function AutomationsView() {
       event_filter: a.event_filter || "",
       steps:
         a.steps && a.steps.length > 0
-          ? a.steps.map((s) => ({ title: s.title, instructions: s.instructions }))
+          ? (JSON.parse(JSON.stringify(a.steps)) as WorkflowNode[])
           : [{ title: "Step 1", instructions: a.instructions }],
     });
     setResults(null);
@@ -176,10 +189,11 @@ export function AutomationsView() {
     setResults(null);
   }
 
-  function setStep(i: number, p: Partial<WorkflowStep>) {
+  // All node edits go through this: deep-copies steps, applies fn, marks dirty.
+  function editNodes(fn: (steps: WorkflowNode[]) => WorkflowNode[]) {
     setDraft((d) => {
       if (!d) return d;
-      const steps = d.steps.map((s, idx) => (idx === i ? { ...s, ...p } : s));
+      const steps = fn(JSON.parse(JSON.stringify(d.steps)) as WorkflowNode[]);
       return { ...d, steps };
     });
     setDirty(true);
@@ -187,29 +201,97 @@ export function AutomationsView() {
     setResults(null);
   }
 
+  function setStep(i: number, p: Partial<WorkflowStep>) {
+    editNodes((steps) => {
+      const n = steps[i];
+      if (n && !isSplitNode(n)) steps[i] = { ...n, ...p };
+      return steps;
+    });
+  }
+
+  function setBranchStep(i: number, bi: number, si: number, p: Partial<WorkflowStep>) {
+    editNodes((steps) => {
+      const n = steps[i];
+      if (n && isSplitNode(n) && n.branches[bi]?.steps[si]) {
+        n.branches[bi].steps[si] = { ...n.branches[bi].steps[si], ...p };
+      }
+      return steps;
+    });
+  }
+
   function addStep() {
-    setDraft((d) => (d ? { ...d, steps: [...d.steps, { title: `Step ${d.steps.length + 1}`, instructions: "" }] } : d));
-    setDirty(true);
-    setTested(false);
+    editNodes((steps) => [...steps, { title: `Step ${steps.length + 1}`, instructions: "" }]);
+  }
+
+  function addSplit() {
+    editNodes((steps) => [
+      ...steps,
+      {
+        branches: [
+          { title: "Branch 1", steps: [{ title: "Step 1", instructions: "" }] },
+          { title: "Branch 2", steps: [{ title: "Step 1", instructions: "" }] },
+        ],
+      },
+    ]);
+  }
+
+  function addBranch(i: number) {
+    editNodes((steps) => {
+      const n = steps[i];
+      if (n && isSplitNode(n) && n.branches.length < 3) {
+        n.branches.push({ title: `Branch ${n.branches.length + 1}`, steps: [{ title: "Step 1", instructions: "" }] });
+      }
+      return steps;
+    });
+  }
+
+  function setBranchTitle(i: number, bi: number, title: string) {
+    editNodes((steps) => {
+      const n = steps[i];
+      if (n && isSplitNode(n) && n.branches[bi]) n.branches[bi].title = title;
+      return steps;
+    });
+  }
+
+  function removeBranch(i: number, bi: number) {
+    editNodes((steps) => {
+      const n = steps[i];
+      if (n && isSplitNode(n) && n.branches.length > 2) n.branches.splice(bi, 1);
+      return steps;
+    });
+  }
+
+  function addBranchStep(i: number, bi: number) {
+    editNodes((steps) => {
+      const n = steps[i];
+      if (n && isSplitNode(n) && n.branches[bi]) {
+        n.branches[bi].steps.push({ title: `Step ${n.branches[bi].steps.length + 1}`, instructions: "" });
+      }
+      return steps;
+    });
+  }
+
+  function removeBranchStep(i: number, bi: number, si: number) {
+    editNodes((steps) => {
+      const n = steps[i];
+      if (n && isSplitNode(n) && n.branches[bi] && n.branches[bi].steps.length > 1) {
+        n.branches[bi].steps.splice(si, 1);
+      }
+      return steps;
+    });
   }
 
   function removeStep(i: number) {
-    setDraft((d) => (d && d.steps.length > 1 ? { ...d, steps: d.steps.filter((_, idx) => idx !== i) } : d));
-    setDirty(true);
-    setTested(false);
+    editNodes((steps) => (steps.length > 1 ? steps.filter((_, idx) => idx !== i) : steps));
   }
 
   function moveStep(i: number, dir: -1 | 1) {
-    setDraft((d) => {
-      if (!d) return d;
+    editNodes((steps) => {
       const j = i + dir;
-      if (j < 0 || j >= d.steps.length) return d;
-      const steps = [...d.steps];
+      if (j < 0 || j >= steps.length) return steps;
       [steps[i], steps[j]] = [steps[j], steps[i]];
-      return { ...d, steps };
+      return steps;
     });
-    setDirty(true);
-    setTested(false);
   }
 
   async function save(): Promise<string | null> {
@@ -218,7 +300,12 @@ export function AutomationsView() {
       toast.error("Give your workflow a name.");
       return null;
     }
-    if (!draft.steps.some((s) => s.instructions.trim())) {
+    const hasContent = draft.steps.some((n) =>
+      isSplitNode(n)
+        ? n.branches.some((b) => b.steps.some((s) => s.instructions.trim()))
+        : n.instructions.trim()
+    );
+    if (!hasContent) {
       toast.error("Add at least one step with instructions.");
       return null;
     }
@@ -490,89 +577,180 @@ export function AutomationsView() {
           </div>
 
           {/* Step nodes */}
-          {draft.steps.map((s, i) => {
-            const res = results?.[i];
-            return (
-              <div key={i}>
-                <Connector />
-                <div className="mx-auto max-w-xl rounded-lg border bg-background p-3 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                      {i + 1}
-                    </span>
-                    <Input
-                      value={s.title}
-                      onChange={(e) => setStep(i, { title: e.target.value })}
-                      className="h-8 border-0 px-1 text-sm font-medium focus-visible:ring-0"
-                    />
-                    {res && (
-                      <span className="ml-auto flex items-center gap-1 text-xs">
-                        {res.status === "ok" ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        ) : res.status === "error" ? (
-                          <XCircle className="h-4 w-4 text-red-600" />
-                        ) : (
-                          <span className="text-muted-foreground">skipped</span>
-                        )}
-                      </span>
-                    )}
-                    <div className="flex shrink-0 items-center">
-                      <button
-                        type="button"
-                        onClick={() => moveStep(i, -1)}
-                        disabled={i === 0}
-                        className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
-                        aria-label="Move up"
-                      >
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moveStep(i, 1)}
-                        disabled={i === draft.steps.length - 1}
-                        className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
-                        aria-label="Move down"
-                      >
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeStep(i)}
-                        disabled={draft.steps.length === 1}
-                        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-red-600 disabled:opacity-30"
-                        aria-label="Remove step"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+          {(() => {
+            const resMap = new Map((results ?? []).map((r) => [r.key, r]));
+            const statusIcon = (res?: StepResult) =>
+              res ? (
+                <span className="ml-auto flex items-center gap-1 text-xs">
+                  {res.status === "ok" ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  ) : res.status === "error" ? (
+                    <XCircle className="h-4 w-4 text-red-600" />
+                  ) : (
+                    <span className="text-muted-foreground">skipped</span>
+                  )}
+                </span>
+              ) : null;
+            const output = (res?: StepResult) =>
+              res && (res.output || res.status === "error") ? (
+                <div
+                  className={cn(
+                    "mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border p-2 text-xs",
+                    res.status === "error"
+                      ? "border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-400"
+                      : "bg-muted/40 text-muted-foreground"
+                  )}
+                >
+                  {res.output || "(failed)"}
+                </div>
+              ) : null;
+
+            return draft.steps.map((node, i) => {
+              const topControls = (
+                <div className="flex shrink-0 items-center">
+                  <button type="button" onClick={() => moveStep(i, -1)} disabled={i === 0} className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30" aria-label="Move up">
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" onClick={() => moveStep(i, 1)} disabled={i === draft.steps.length - 1} className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30" aria-label="Move down">
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" onClick={() => removeStep(i)} disabled={draft.steps.length === 1} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-red-600 disabled:opacity-30" aria-label="Remove">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+
+              if (isSplitNode(node)) {
+                return (
+                  <div key={i}>
+                    <Connector />
+                    <div className="mx-auto max-w-3xl">
+                      {/* Split header */}
+                      <div className="mx-auto flex max-w-xl items-center gap-2 rounded-xl border bg-background p-3 shadow-sm">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-violet-500/10 text-violet-600">
+                          <Split className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="text-sm font-medium">At the same time</span>
+                        <span className="text-xs text-muted-foreground">each branch runs in parallel, then results merge</span>
+                        {topControls}
+                      </div>
+                      {/* Fan-out */}
+                      <div className="mx-auto h-3 w-px bg-border" />
+                      <div className="mx-auto h-px w-2/3 bg-border" />
+                      <div className={cn("grid gap-3 pt-0", node.branches.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+                        {node.branches.map((b, bi) => (
+                          <div key={bi} className="flex flex-col">
+                            <div className="mx-auto h-3 w-px bg-border" />
+                            <div className={cn("flex-1 rounded-xl border bg-background p-2 shadow-sm ring-1 ring-inset", hue(bi).ring)}>
+                              <div className="flex items-center gap-1.5 px-1 pb-1">
+                                <span className={cn("h-2 w-2 shrink-0 rounded-full", hue(bi).chip.split(" ")[0].replace("/10", ""))} />
+                                <Input
+                                  value={b.title || ""}
+                                  onChange={(e) => setBranchTitle(i, bi, e.target.value)}
+                                  placeholder={`Branch ${bi + 1}`}
+                                  className="h-7 border-0 px-1 text-xs font-semibold focus-visible:ring-0"
+                                />
+                                {node.branches.length > 2 && (
+                                  <button type="button" onClick={() => removeBranch(i, bi)} className="rounded p-1 text-muted-foreground hover:text-red-600" aria-label="Remove branch">
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                {b.steps.map((s, si) => {
+                                  const res = resMap.get(`${i}.b${bi}.s${si}`);
+                                  return (
+                                    <div key={si} className="rounded-lg border bg-background p-2">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold", hue(bi).chip)}>
+                                          {si + 1}
+                                        </span>
+                                        <Input
+                                          value={s.title}
+                                          onChange={(e) => setBranchStep(i, bi, si, { title: e.target.value })}
+                                          className="h-6 border-0 px-1 text-xs font-medium focus-visible:ring-0"
+                                        />
+                                        {statusIcon(res)}
+                                        {b.steps.length > 1 && (
+                                          <button type="button" onClick={() => removeBranchStep(i, bi, si)} className="rounded p-0.5 text-muted-foreground hover:text-red-600" aria-label="Remove step">
+                                            <Trash2 className="h-3 w-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                      <textarea
+                                        value={s.instructions}
+                                        onChange={(e) => setBranchStep(i, bi, si, { instructions: e.target.value })}
+                                        rows={2}
+                                        placeholder="What should happen in this branch?"
+                                        className="mt-1.5 w-full resize-none rounded-md border bg-background px-2 py-1 text-xs focus:border-ring focus:outline-none"
+                                      />
+                                      {output(res)}
+                                    </div>
+                                  );
+                                })}
+                                <button type="button" onClick={() => addBranchStep(i, bi)} className="w-full rounded-md border border-dashed px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent/40">
+                                  + step
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Fan-in */}
+                      <div className="mx-auto h-px w-2/3 bg-border" />
+                      <div className="mx-auto h-3 w-px bg-border" />
+                      {node.branches.length < 3 && (
+                        <div className="flex justify-center">
+                          <button type="button" onClick={() => addBranch(i)} className="rounded-md border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent/40">
+                            + branch
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <textarea
-                    value={s.instructions}
-                    onChange={(e) => setStep(i, { instructions: e.target.value })}
-                    rows={2}
-                    placeholder="What should the agent do in this step? (plain English)"
-                    className="mt-2 w-full resize-none rounded-md border bg-background px-2 py-1.5 text-sm focus:border-ring focus:outline-none"
-                  />
-                  {res && (res.output || res.status === "error") && (
-                    <div
-                      className={cn(
-                        "mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border p-2 text-xs",
-                        res.status === "error" ? "border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-400" : "bg-muted/40 text-muted-foreground"
-                      )}
-                    >
-                      {res.output || "(failed)"}
+                );
+              }
+
+              const res = resMap.get(`${i}`);
+              return (
+                <div key={i}>
+                  <Connector />
+                  <div className="mx-auto max-w-xl rounded-xl border bg-background p-3 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold", hue(i).chip)}>
+                        {i + 1}
+                      </span>
+                      <Input
+                        value={node.title}
+                        onChange={(e) => setStep(i, { title: e.target.value })}
+                        className="h-8 border-0 px-1 text-sm font-medium focus-visible:ring-0"
+                      />
+                      {statusIcon(res)}
+                      {topControls}
                     </div>
-                  )}
+                    <textarea
+                      value={node.instructions}
+                      onChange={(e) => setStep(i, { instructions: e.target.value })}
+                      rows={2}
+                      placeholder="What should the agent do in this step? (plain English)"
+                      className="mt-2 w-full resize-none rounded-md border bg-background px-2 py-1.5 text-sm focus:border-ring focus:outline-none"
+                    />
+                    {output(res)}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
 
           <Connector />
-          <div className="mx-auto flex max-w-xl justify-center">
+          <div className="mx-auto flex max-w-xl justify-center gap-2">
             <Button variant="outline" size="sm" onClick={addStep}>
               <Plus className="h-4 w-4" />
               Add step
+            </Button>
+            <Button variant="outline" size="sm" onClick={addSplit}>
+              <Split className="h-4 w-4" />
+              Add split
             </Button>
           </div>
         </div>

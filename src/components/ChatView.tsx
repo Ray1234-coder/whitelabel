@@ -25,7 +25,7 @@ import {
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { stripHouseStyle } from "@/config/houseStyle";
-import type { AgentRow, Automation } from "@/lib/types";
+import { isSplitNode, type AgentRow, type Automation, type WorkflowNode } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -1060,7 +1060,7 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
                 const wf = (workflows ?? []).find((w) => w.id === openItem.id);
                 if (!wf)
                   return <p className="text-sm text-muted-foreground">Workflow not found.</p>;
-                const steps =
+                const steps: WorkflowNode[] =
                   wf.steps && wf.steps.length > 0
                     ? wf.steps
                     : [{ title: wf.name, instructions: wf.instructions }];
@@ -1069,7 +1069,16 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
                     ? { hourly: "Every hour", daily: "Every day", weekly: "Every week" }[
                         wf.cadence ?? "daily"
                       ] ?? "Scheduled"
-                    : "Webhook";
+                    : wf.trigger_type === "event"
+                      ? `${wf.event_source === "slack" ? "Slack" : "Stripe"} event`
+                      : "Webhook";
+                const CHIPS = [
+                  "bg-blue-500/10 text-blue-600",
+                  "bg-amber-500/10 text-amber-600",
+                  "bg-emerald-500/10 text-emerald-600",
+                  "bg-rose-500/10 text-rose-600",
+                  "bg-violet-500/10 text-violet-600",
+                ];
                 return (
                   <div className="mx-auto max-w-sm">
                     {/* Start node */}
@@ -1090,27 +1099,67 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
                       </div>
                     </div>
 
-                    {steps.map((s, i) => (
-                      <div key={i}>
-                        <div className="flex justify-center py-1.5">
-                          <div className="h-5 w-px bg-border" />
-                        </div>
-                        <div
-                          style={{ animationDelay: `${(i + 1) * 60}ms` }}
-                          className="animate-fade-up rounded-xl border bg-background shadow-sm"
-                        >
-                          <div className="flex items-center gap-2 border-b px-3 py-2">
-                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-xs font-semibold text-primary">
-                              {i + 1}
-                            </span>
-                            <span className="truncate text-sm font-medium">{s.title}</span>
+                    {steps.map((node, i) =>
+                      isSplitNode(node) ? (
+                        <div key={i}>
+                          <div className="flex justify-center py-1.5">
+                            <div className="h-5 w-px bg-border" />
                           </div>
-                          <div className="line-clamp-4 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                            {s.instructions}
+                          <div className="mx-auto h-px w-3/4 bg-border" />
+                          <div className={cn("grid gap-2", node.branches.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+                            {node.branches.map((b, bi) => (
+                              <div key={bi} className="flex flex-col">
+                                <div className="mx-auto h-3 w-px bg-border" />
+                                <div
+                                  style={{ animationDelay: `${(i + 1) * 60}ms` }}
+                                  className="animate-fade-up flex-1 rounded-xl border bg-background p-2 shadow-sm"
+                                >
+                                  <p className="flex items-center gap-1.5 px-1 pb-1 text-[11px] font-semibold">
+                                    <span className={cn("h-2 w-2 rounded-full", ["bg-blue-500", "bg-amber-500", "bg-emerald-500"][bi % 3])} />
+                                    {b.title || `Branch ${bi + 1}`}
+                                  </p>
+                                  {b.steps.map((s, si) => (
+                                    <div key={si} className="mb-1.5 rounded-lg border px-2 py-1.5 last:mb-0">
+                                      <p className="flex items-center gap-1.5 text-xs font-medium">
+                                        <span className={cn("flex h-4 w-4 items-center justify-center rounded text-[9px] font-semibold", CHIPS[bi % CHIPS.length])}>
+                                          {si + 1}
+                                        </span>
+                                        <span className="truncate">{s.title}</span>
+                                      </p>
+                                      <p className="line-clamp-2 pt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                                        {s.instructions}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mx-auto h-px w-3/4 bg-border" />
+                          <div className="mx-auto h-3 w-px bg-border" />
+                        </div>
+                      ) : (
+                        <div key={i}>
+                          <div className="flex justify-center py-1.5">
+                            <div className="h-5 w-px bg-border" />
+                          </div>
+                          <div
+                            style={{ animationDelay: `${(i + 1) * 60}ms` }}
+                            className="animate-fade-up rounded-xl border bg-background shadow-sm"
+                          >
+                            <div className="flex items-center gap-2 border-b px-3 py-2">
+                              <span className={cn("flex h-6 w-6 items-center justify-center rounded-md text-xs font-semibold", CHIPS[i % CHIPS.length])}>
+                                {i + 1}
+                              </span>
+                              <span className="truncate text-sm font-medium">{node.title}</span>
+                            </div>
+                            <div className="line-clamp-4 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                              {node.instructions}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    )}
 
                     <div className="mt-4 flex items-center justify-between gap-2 text-xs">
                       <span className="text-muted-foreground">

@@ -24,13 +24,27 @@ export interface WorkflowStep {
   instructions: string;
 }
 
+// One parallel lane inside a split.
+export interface WorkflowBranch {
+  title?: string;
+  steps: WorkflowStep[];
+}
+
+// A workflow is an ordered list of nodes: plain steps, or a split that fans out
+// into parallel branches and merges back before the next node.
+export type WorkflowNode = WorkflowStep | { title?: string; branches: WorkflowBranch[] };
+
+export function isSplitNode(n: WorkflowNode): n is { title?: string; branches: WorkflowBranch[] } {
+  return typeof n === "object" && n !== null && "branches" in n && Array.isArray((n as { branches?: unknown }).branches);
+}
+
 export interface Automation {
   id: string;
   workspace_id: string;
   agent37_id: string;
   name: string;
   instructions: string;
-  steps: WorkflowStep[] | null;
+  steps: WorkflowNode[] | null;
   trigger_type: "schedule" | "webhook" | "event";
   cadence: "hourly" | "daily" | "weekly" | null;
   webhook_token: string | null;
