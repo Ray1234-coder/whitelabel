@@ -143,9 +143,72 @@
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
+/* ---- Landing page motion ---- */
+
+/* Scroll reveal (paired with the <Reveal> component) */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Hero entrance (plays on load, staggered via delay classes) */
+@keyframes heroUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero-enter { animation: heroUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.hero-delay-1 { animation-delay: 0.1s; }
+.hero-delay-2 { animation-delay: 0.2s; }
+.hero-delay-3 { animation-delay: 0.3s; }
+.hero-delay-4 { animation-delay: 0.45s; }
+
+/* Ambient hero glow drift */
+@keyframes glowDrift {
+  0%, 100% { transform: translate(-50%, 0) scale(1); opacity: 0.8; }
+  50% { transform: translate(-46%, 16px) scale(1.06); opacity: 1; }
+}
+.glow-drift { animation: glowDrift 9s ease-in-out infinite; }
+
+/* Gentle card lift on hover */
+.lift {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease;
+}
+.lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* Chat bubble pop-in inside the product mockup */
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.bubble-enter { animation: bubbleIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.bubble-delay-1 { animation-delay: 0.8s; }
+.bubble-delay-2 { animation-delay: 1.4s; }
+.bubble-delay-3 { animation-delay: 2s; }
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up, .animate-fade-in, .animate-pop, .animate-highlight,
-  .stream-caret::after, .shimmer {
+  .stream-caret::after, .shimmer,
+  .hero-enter, .glow-drift, .bubble-enter {
     animation: none !important;
+  }
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .lift, .lift:hover {
+    transform: none !important;
+    transition: none !important;
   }
 }

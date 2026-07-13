@@ -17,6 +17,7 @@ import { getSession } from "@/lib/auth";
 import { branding } from "@/config/branding";
 import { CountUp } from "@/components/landing/CountUp";
 import { LeadForm } from "@/components/landing/LeadForm";
+import { Reveal } from "@/components/landing/Reveal";
 
 const PAIN_FIX = [
   {
@@ -140,19 +141,19 @@ export default async function Home() {
         <section className="relative overflow-hidden px-6 pb-24 pt-24 text-center md:pt-32">
           <div
             aria-hidden
-            className="pointer-events-none absolute left-1/2 top-40 h-[600px] w-[900px] -translate-x-1/2 rounded-full bg-indigo-600/[0.04] blur-3xl"
+            className="glow-drift pointer-events-none absolute left-1/2 top-40 h-[600px] w-[900px] -translate-x-1/2 rounded-full bg-indigo-600/[0.04] blur-3xl"
           />
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600">
+          <p className="hero-enter text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600">
             AI agents for every workflow
           </p>
-          <h1 className="mx-auto mt-5 max-w-3xl text-5xl font-semibold tracking-tight md:text-6xl">
+          <h1 className="hero-enter hero-delay-1 mx-auto mt-5 max-w-3xl text-5xl font-semibold tracking-tight md:text-6xl">
             Your work, running itself.
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-zinc-600">
+          <p className="hero-enter hero-delay-2 mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-zinc-600">
             {branding.appName} provisions a team of AI agents for your company — trained on your
             processes, working around the clock, and one chat away when you need them.
           </p>
-          <div className="mt-8 flex items-center justify-center gap-3">
+          <div className="hero-enter hero-delay-3 mt-8 flex items-center justify-center gap-3">
             <Link
               href="/login"
               className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
@@ -168,7 +169,7 @@ export default async function Home() {
           </div>
 
           {/* Product mockup */}
-          <div className="relative mx-auto mt-16 max-w-4xl rounded-xl border border-zinc-200 bg-white text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <div className="hero-enter hero-delay-4 relative mx-auto mt-16 max-w-4xl rounded-xl border border-zinc-200 bg-white text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-shadow duration-500 hover:shadow-[0_8px_32px_rgba(79,70,229,0.08)]">
             <div className="flex items-center gap-1.5 border-b border-zinc-100 px-4 py-3">
               <span className="h-2.5 w-2.5 rounded-full bg-zinc-200" />
               <span className="h-2.5 w-2.5 rounded-full bg-zinc-200" />
@@ -192,14 +193,14 @@ export default async function Home() {
                   </span>
                 </div>
                 <div className="mt-4 space-y-3 text-sm">
-                  <div className="ml-auto w-fit max-w-[80%] rounded-lg bg-indigo-600 px-3 py-2 text-white">
+                  <div className="bubble-enter bubble-delay-1 ml-auto w-fit max-w-[80%] rounded-lg bg-indigo-600 px-3 py-2 text-white">
                     How many invoices are still waiting on approval?
                   </div>
-                  <div className="w-fit max-w-[85%] rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-zinc-700">
+                  <div className="bubble-enter bubble-delay-2 w-fit max-w-[85%] rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-zinc-700">
                     3 invoices are pending — two are waiting on legal review, one needs a PO
                     match. I&apos;ve nudged the approvers and flagged the mismatch for you.
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-zinc-400">
+                  <div className="bubble-enter bubble-delay-3 flex items-center gap-2 text-xs text-zinc-400">
                     <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600" />
                     Reconciled 214 invoices today
                   </div>
@@ -212,14 +213,16 @@ export default async function Home() {
         {/* Problem → Solution */}
         <section id="product" className="border-t border-zinc-100 px-6 py-28">
           <div className="mx-auto max-w-6xl">
-            <h2 className="max-w-xl text-3xl font-semibold tracking-tight md:text-4xl">
-              The busywork is eating your week.
-            </h2>
-            <p className="mt-4 max-w-xl text-zinc-600">
-              Every growing company runs on the same invisible grind — and it doesn&apos;t have to.
-            </p>
+            <Reveal>
+              <h2 className="max-w-xl text-3xl font-semibold tracking-tight md:text-4xl">
+                The busywork is eating your week.
+              </h2>
+              <p className="mt-4 max-w-xl text-zinc-600">
+                Every growing company runs on the same invisible grind — and it doesn&apos;t have to.
+              </p>
+            </Reveal>
             <div className="mt-12 grid gap-6 md:grid-cols-2">
-              <div className="rounded-xl border border-zinc-200 p-8">
+              <Reveal className="lift rounded-xl border border-zinc-200 p-8">
                 <p className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
                   Without {branding.appName}
                 </p>
@@ -231,8 +234,8 @@ export default async function Home() {
                     </li>
                   ))}
                 </ul>
-              </div>
-              <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-8">
+              </Reveal>
+              <Reveal delay={120} className="lift rounded-xl border border-indigo-100 bg-indigo-50/40 p-8">
                 <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600">
                   With {branding.appName}
                 </p>
@@ -244,7 +247,7 @@ export default async function Home() {
                     </li>
                   ))}
                 </ul>
-              </div>
+              </Reveal>
             </div>
           </div>
         </section>
@@ -252,28 +255,30 @@ export default async function Home() {
         {/* Stats */}
         <section className="border-t border-zinc-100 px-6 py-28">
           <div className="mx-auto max-w-6xl text-center">
-            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
-              Numbers from teams already running on {branding.appName}
-            </h2>
+            <Reveal>
+              <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
+                Numbers from teams already running on {branding.appName}
+              </h2>
+            </Reveal>
             <div className="mt-14 grid gap-12 sm:grid-cols-3">
-              <div>
+              <Reveal>
                 <p className="text-6xl font-semibold tracking-tight text-indigo-600">
                   <CountUp value={31} suffix=" hrs" />
                 </p>
                 <p className="mt-3 text-sm text-zinc-600">saved per employee, every month</p>
-              </div>
-              <div>
+              </Reveal>
+              <Reveal delay={120}>
                 <p className="text-6xl font-semibold tracking-tight text-indigo-600">
                   <CountUp value={87} suffix="%" />
                 </p>
                 <p className="mt-3 text-sm text-zinc-600">of routine workflows fully automated</p>
-              </div>
-              <div>
+              </Reveal>
+              <Reveal delay={240}>
                 <p className="text-6xl font-semibold tracking-tight text-indigo-600">
                   <CountUp value={4} suffix=" min" />
                 </p>
                 <p className="mt-3 text-sm text-zinc-600">median time from request to done</p>
-              </div>
+              </Reveal>
             </div>
           </div>
         </section>
@@ -281,52 +286,56 @@ export default async function Home() {
         {/* Security strip */}
         <section id="security" className="border-t border-zinc-100 px-6 py-20">
           <div className="mx-auto max-w-6xl text-center">
-            <h2 className="text-2xl font-semibold tracking-tight">
-              Enterprise-grade security, provable on request.
-            </h2>
-            <p className="mx-auto mt-3 max-w-xl text-sm text-zinc-600">
-              Any platform touching your operations should prove it&apos;s safe — not just say so.{" "}
-              {branding.appName} does.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Reveal>
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Enterprise-grade security, provable on request.
+              </h2>
+              <p className="mx-auto mt-3 max-w-xl text-sm text-zinc-600">
+                Any platform touching your operations should prove it&apos;s safe — not just say so.{" "}
+                {branding.appName} does.
+              </p>
+            </Reveal>
+            <Reveal delay={120} className="mt-8 flex flex-wrap items-center justify-center gap-3">
               {["SOC 2 Type II", "GDPR", "ISO 27001", "SSO / SAML", "Data residency options"].map(
                 (badge) => (
                   <span
                     key={badge}
-                    className="flex items-center gap-1.5 rounded-full border border-zinc-200 px-4 py-1.5 text-xs font-medium text-zinc-700"
+                    className="flex items-center gap-1.5 rounded-full border border-zinc-200 px-4 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50/50"
                   >
                     <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
                     {badge}
                   </span>
                 )
               )}
-            </div>
+            </Reveal>
           </div>
         </section>
 
         {/* Capabilities */}
         <section id="agents" className="border-t border-zinc-100 px-6 py-28">
           <div className="mx-auto max-w-6xl">
-            <h2 className="max-w-2xl text-3xl font-semibold tracking-tight md:text-4xl">
-              One dashboard. A whole workforce of agents.
-            </h2>
-            <p className="mt-4 max-w-2xl text-zinc-600">
-              {branding.appName} makes every department faster — without changing the tools you
-              already use.
-            </p>
+            <Reveal>
+              <h2 className="max-w-2xl text-3xl font-semibold tracking-tight md:text-4xl">
+                One dashboard. A whole workforce of agents.
+              </h2>
+              <p className="mt-4 max-w-2xl text-zinc-600">
+                {branding.appName} makes every department faster — without changing the tools you
+                already use.
+              </p>
+            </Reveal>
             <div className="mt-12 divide-y divide-zinc-100 border-y border-zinc-100">
-              {CAPABILITIES.map((cap) => {
+              {CAPABILITIES.map((cap, i) => {
                 const Icon = cap.icon;
                 return (
-                  <div key={cap.title} className="flex gap-5 py-7">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
+                  <Reveal key={cap.title} delay={i * 80} className="group flex gap-5 py-7">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 transition-transform duration-300 group-hover:scale-110">
                       <Icon className="h-5 w-5 text-indigo-600" />
                     </div>
                     <div>
                       <h3 className="font-semibold">{cap.title}</h3>
                       <p className="mt-1 text-sm text-zinc-600">{cap.body}</p>
                     </div>
-                  </div>
+                  </Reveal>
                 );
               })}
             </div>
@@ -335,7 +344,7 @@ export default async function Home() {
 
         {/* Manifesto */}
         <section className="border-t border-zinc-100 px-6 py-28">
-          <div className="mx-auto max-w-3xl text-center">
+          <Reveal className="mx-auto max-w-3xl text-center">
             <h2 className="text-3xl font-semibold leading-snug tracking-tight md:text-4xl">
               Good work shouldn&apos;t feel like fighting your tools.{" "}
               <span className="text-indigo-600">That&apos;s why there&apos;s {branding.appName}.</span>
@@ -351,26 +360,29 @@ export default async function Home() {
               <MessageSquare className="h-8 w-8 text-indigo-600" />
               <CheckCircle2 className="h-8 w-8" />
             </div>
-          </div>
+          </Reveal>
         </section>
 
         {/* Logo wall */}
         <section id="customers" className="border-t border-zinc-100 px-6 py-20">
-          <div className="mx-auto max-w-6xl text-center">
+          <Reveal className="mx-auto max-w-6xl text-center">
             <p className="text-sm font-medium text-zinc-400">Teams that run on {branding.appName}</p>
             <div className="mt-8 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
               {LOGOS.map((logo) => (
-                <span key={logo} className="text-sm font-semibold tracking-wide text-zinc-300">
+                <span
+                  key={logo}
+                  className="text-sm font-semibold tracking-wide text-zinc-300 transition-colors duration-300 hover:text-zinc-500"
+                >
                   {logo}
                 </span>
               ))}
             </div>
-          </div>
+          </Reveal>
         </section>
 
         {/* Testimonial */}
         <section className="border-t border-zinc-100 px-6 py-28">
-          <div className="mx-auto max-w-3xl">
+          <Reveal className="mx-auto max-w-3xl">
             <span className="text-6xl font-serif leading-none text-indigo-600">&ldquo;</span>
             <blockquote className="mt-2 text-2xl font-medium leading-relaxed tracking-tight">
               During our year-end close, {branding.appName}&apos;s agents processed over 2,300
@@ -378,20 +390,26 @@ export default async function Home() {
               doing data entry — we closed the books six days early.
             </blockquote>
             <p className="mt-6 text-sm text-zinc-500">— VP of Operations, early access customer</p>
-          </div>
+          </Reveal>
         </section>
 
         {/* How it works */}
         <section id="how-it-works" className="border-t border-zinc-100 px-6 py-28">
           <div className="mx-auto max-w-6xl">
-            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">How it works</h2>
+            <Reveal>
+              <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">How it works</h2>
+            </Reveal>
             <div className="mt-12 grid gap-6 md:grid-cols-3">
               {STEPS.map((step, i) => (
-                <div key={step.title} className="rounded-xl border border-zinc-200 p-8">
+                <Reveal
+                  key={step.title}
+                  delay={i * 120}
+                  className="lift rounded-xl border border-zinc-200 p-8"
+                >
                   <span className="text-sm font-semibold text-indigo-600">0{i + 1}</span>
                   <h3 className="mt-3 font-semibold">{step.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-zinc-600">{step.body}</p>
-                </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -399,7 +417,7 @@ export default async function Home() {
 
         {/* Final CTA */}
         <section className="border-t border-zinc-100 px-6 py-28">
-          <div className="mx-auto max-w-2xl text-center">
+          <Reveal className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
               Curious what your team could hand off first?
             </h2>
@@ -415,11 +433,12 @@ export default async function Home() {
             </div>
             <p className="mt-5 text-sm text-zinc-600">
               Ready now?{" "}
-              <Link href="/login" className="inline-flex items-center gap-1 font-medium text-indigo-600 hover:text-indigo-700">
-                Get your agents <ArrowRight className="h-3.5 w-3.5" />
+              <Link href="/login" className="group inline-flex items-center gap-1 font-medium text-indigo-600 hover:text-indigo-700">
+                Get your agents{" "}
+                <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
               </Link>
             </p>
-          </div>
+          </Reveal>
         </section>
       </main>
 
