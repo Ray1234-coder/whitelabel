@@ -447,6 +447,20 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
         } catch {
           /* tolerate */
         }
+        // Text streamed BEFORE a tool call is interim narration ("let me check
+        // which tools…") — collapse it so the user only ever reads the final,
+        // post-tool message. The Working checklist still shows the activity.
+        assembled = "";
+        if (mountedRef.current) {
+          setMessages((m) => {
+            const next = [...m];
+            const prev = next[next.length - 1];
+            if (prev?.role === "assistant" && prev.content) {
+              next[next.length - 1] = { ...prev, content: "" };
+            }
+            return next;
+          });
+        }
         updateTools((tools) => [...tools, { tool, label, status: "running" }]);
       } else if (frame.event === "response.tool_call.completed") {
         let tool = "";
