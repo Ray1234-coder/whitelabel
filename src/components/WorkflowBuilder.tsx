@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { WORKFLOW_RUNS_PER_DAY } from "@/config/agents";
+import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/config/workflowTemplates";
 import { isSplitNode, type Automation, type WorkflowNode, type WorkflowStep } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -155,6 +156,8 @@ export function WorkflowBuilder({
     connected: boolean;
     account: string | null;
   } | null>(null);
+  // Fresh new workflows open on the template gallery first.
+  const [showTemplates, setShowTemplates] = useState(automation === null);
 
   // Re-seed only when a *different* workflow is opened (keyed by id) — list
   // refreshes swap the object identity, and a just-created draft briefly has
@@ -170,8 +173,26 @@ export function WorkflowBuilder({
     setDirty(!automation);
     setTested(!!automation?.tested_at);
     setResults(null);
+    setShowTemplates(automationId === null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automationId]);
+
+  function applyTemplate(t: WorkflowTemplate) {
+    setDraft({
+      id: null,
+      name: t.title,
+      trigger_type: t.trigger_type,
+      cadence: t.cadence ?? "daily",
+      event_source: "stripe",
+      event_filter: "",
+      webhook_token: null,
+      steps: JSON.parse(JSON.stringify(t.steps)) as WorkflowNode[],
+    });
+    setDirty(true);
+    setTested(false);
+    setResults(null);
+    setShowTemplates(false);
+  }
 
   const refreshStripeConn = useCallback(async () => {
     try {
@@ -436,6 +457,65 @@ export function WorkflowBuilder({
         {res.output || "(failed)"}
       </div>
     ) : null;
+
+  // Template gallery for brand-new workflows: pick a starter or begin blank.
+  if (showTemplates && draft.id === null) {
+    const leafCount = (steps: WorkflowNode[]) =>
+      steps.reduce(
+        (n, s) => n + (isSplitNode(s) ? s.branches.reduce((m, b) => m + b.steps.length, 0) : 1),
+        0
+      );
+    return (
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-semibold">Start with a template</p>
+          <p className="text-xs text-muted-foreground">
+            Real recipes you can adopt in one click — edit anything after.
+          </p>
+        </div>
+        <div className="space-y-2">
+          {WORKFLOW_TEMPLATES.map((t, i) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => applyTemplate(t)}
+              style={{ animationDelay: `${i * 45}ms` }}
+              className="w-full animate-fade-up rounded-xl border bg-background p-3 text-left shadow-sm transition-colors hover:border-ring hover:bg-accent/30"
+            >
+              <div className="flex items-center gap-2">
+                <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-base", hue(i))}>
+                  {t.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{t.title}</span>
+                  <span className="block text-[11px] text-muted-foreground">{t.category}</span>
+                </span>
+              </div>
+              <p className="mt-1.5 text-xs text-muted-foreground">{t.blurb}</p>
+              <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                {t.trigger_type === "schedule" ? (
+                  <Clock className="h-3 w-3" />
+                ) : (
+                  <Webhook className="h-3 w-3" />
+                )}
+                {t.trigger_type === "schedule"
+                  ? t.cadence === "daily"
+                    ? "Runs every day"
+                    : `Runs ${t.cadence}`
+                  : "Starts from a link (form, booking…)"}
+                <span>· {leafCount(t.steps)} steps</span>
+                {t.steps.some(isSplitNode) && <span>· parallel</span>}
+              </p>
+            </button>
+          ))}
+        </div>
+        <Button size="sm" variant="outline" className="w-full" onClick={() => setShowTemplates(false)}>
+          <Plus className="h-3.5 w-3.5" />
+          Start from scratch
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
