@@ -29,24 +29,35 @@ export default function LoginPage() {
     async function init() {
       const supabase = createClient();
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const searchParams = new URLSearchParams(window.location.search);
       const hashType = hashParams.get("type");
       const accessToken = hashParams.get("access_token");
       const refreshToken = hashParams.get("refresh_token");
+      const code = searchParams.get("code");
+
+      const enterRecovery = () => {
+        if (!mounted) return;
+        setMode("recovery");
+        setMessage("Choose a new password for this account.");
+        window.history.replaceState(null, "", window.location.pathname);
+      };
 
       if (hashType === "recovery" && accessToken && refreshToken) {
+        // Legacy/implicit-flow links: tokens arrive in the URL hash.
         const { error } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
         });
-        if (mounted) {
-          if (error) {
-            setAuthError(true);
-          } else {
-            setMode("recovery");
-            setMessage("Choose a new password for this account.");
-            window.history.replaceState(null, "", window.location.pathname);
-          }
-        }
+        if (mounted) (error ? setAuthError(true) : enterRecovery());
+      } else if (code) {
+        // PKCE links land with ?code= — exchange it for a session client-side.
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (mounted) (error ? setAuthError(true) : enterRecovery());
+      } else if (searchParams.get("reset") === "1") {
+        // Reset emails we send route through /auth/callback (server-side code
+        // exchange), which then redirects here with ?reset=1 and a live session.
+        const { data } = await supabase.auth.getSession();
+        if (mounted) (data.session ? enterRecovery() : setAuthError(true));
       }
 
       if (mounted) setReady(true);
@@ -71,7 +82,8 @@ export default function LoginPage() {
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${window.location.origin}/login`,
+      // Route through the server-side code exchange, then back here in reset mode.
+      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/login?reset=1")}`,
     });
     setLoading(false);
     if (error) {
