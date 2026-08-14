@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { CustomConnectorsCard } from "@/components/CustomConnectorsCard";
 
 export function SettingsView() {
   const { current, refresh, setCurrentId } = useWorkspace();
@@ -90,6 +91,8 @@ export function SettingsView() {
           </Button>
         </div>
       </div>
+
+      {isAdmin && <CustomConnectorsCard workspaceId={current.id} />}
 
       {isAdmin && (
         <div className="rounded-lg border border-destructive/40 p-4">

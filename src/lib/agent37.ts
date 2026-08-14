@@ -127,4 +127,11 @@ export const agent37 = {
     call<Usage>(`/instances/${id}/usage${month ? `?month=${encodeURIComponent(month)}` : ""}`),
 
   listTemplates: () => call<{ data: Template[] }>("/templates"),
+
+  // Run a shell command inside a RUNNING instance (control-plane exec API).
+  exec: (id: string, command: string) =>
+    call<{ stdout?: string; output?: string }>(`/instances/${id}/exec`, {
+      method: "POST",
+      body: JSON.stringify({ command }),
+    }),
 };
