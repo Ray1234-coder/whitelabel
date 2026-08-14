@@ -18,6 +18,7 @@ import { branding } from "@/config/branding";
 import { CountUp } from "@/components/landing/CountUp";
 import { LeadForm } from "@/components/landing/LeadForm";
 import { Reveal } from "@/components/landing/Reveal";
+import { RecoveryForward } from "@/components/RecoveryForward";
 import { ChatDemo } from "@/components/landing/ChatDemo";
 
 function StaggeredHeadline() {
@@ -131,6 +132,7 @@ export default async function Home() {
 
   return (
     <div className="bg-white text-zinc-950">
+      <RecoveryForward />
       {/* Nav */}
       <header className="sticky top-0 z-40 border-b border-zinc-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">

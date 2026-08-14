@@ -62,6 +62,25 @@ export default function LoginPage() {
     };
   }, []);
 
+  async function onForgotPassword() {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      toast.error("Type your email above first, then tap Forgot password.");
+      return;
+    }
+    setLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: `${window.location.origin}/login`,
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setMessage("Check your email — we sent you a link to reset your password.");
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
@@ -167,7 +186,19 @@ export default function LoginPage() {
           ) : null}
 
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              {mode === "sign-in" ? (
+                <button
+                  type="button"
+                  onClick={onForgotPassword}
+                  disabled={loading}
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+                >
+                  Forgot password?
+                </button>
+              ) : null}
+            </div>
             <Input
               id="password"
               type="password"
