@@ -86,7 +86,10 @@ export async function dataPlaneFetch(
   return fetch(`https://${instanceId}.agent37.app/v1${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${key}`,
+      // Instance URLs authenticate with the raw key in X-Agent37-Key (the old
+      // `Authorization: Bearer` form is deprecated and will stop working).
+      // api.agent37.com (the hosting API, `call()` above) keeps Authorization.
+      "X-Agent37-Key": key,
       "Content-Type": "application/json",
       ...(init?.headers || {}),
     },
