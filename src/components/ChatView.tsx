@@ -10,12 +10,15 @@ import {
   BookOpen,
   CheckCircle2,
   Clock,
+  Columns3,
+  Folder,
   Loader2,
-  MessageSquare,
   Paperclip,
   Plus,
-  RefreshCw,
+  Repeat2,
+  Settings2,
   Sparkles,
+  SquarePen,
   Webhook,
   Wrench,
   X,
@@ -24,6 +27,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { PORTS } from "@/config/agents";
+import { branding } from "@/config/branding";
 import { stripHouseStyle } from "@/config/houseStyle";
 import { isSplitNode, type AgentRow, type Automation, type WorkflowNode } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -250,6 +255,7 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
   const [kbSaving, setKbSaving] = useState(false);
   const [kbLoaded, setKbLoaded] = useState(false);
   const [highlightWorkflowId, setHighlightWorkflowId] = useState<string | null>(null);
+  const [surface, setSurface] = useState<"chat" | "tasks" | "recurring">("chat");
   const sessionRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -724,141 +730,266 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
   const agentName = agent?.name || "Agent";
   const running = agent?.status === "running" || agent?.status === "sleeping";
 
+  async function openAgentPort(port: number) {
+    try {
+      const { url } = await apiFetch<{ url: string }>(`/api/agents/${agentId}/signed-url`, {
+        method: "POST",
+        body: JSON.stringify({ port }),
+      });
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   return (
     <div
       className={cn(
-        "flex w-full",
-        standalone ? "h-screen" : "h-[calc(100vh-3rem)] md:h-[calc(100vh-3.5rem)]"
+        "flex w-full bg-[#f4f4f5]",
+        standalone ? "h-screen p-3" : "h-[calc(100vh-3rem)] md:h-[calc(100vh-3.5rem)]"
       )}
     >
-      {/* LEFT SIDEBAR — chats, workspace, workflows (click to open on the right) */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r bg-muted/20 md:flex">
-        <div className="flex items-center gap-2 border-b px-3 py-3">
+      {/* Mission Control navigation */}
+      <aside className="hidden w-60 shrink-0 flex-col px-1 py-2 md:flex">
+        <div className="mb-9 flex items-center justify-between px-3">
+          <Link href="/dashboard" className="flex items-center gap-2" aria-label="Back to dashboard">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl border bg-white text-sm font-black shadow-sm">
+              W
+            </span>
+            <span className="max-w-28 truncate text-sm font-semibold">{branding.appName}</span>
+          </Link>
           <Link
             href="/dashboard"
-            className="flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent"
+            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-white hover:text-foreground"
             aria-label="Back to dashboard"
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <span className="truncate text-sm font-semibold">{agentName}</span>
         </div>
 
-        {/* Fixed top: actions + workspace + workflows (always visible) */}
-        <div className="shrink-0 space-y-3 border-b p-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-start gap-2"
-            onClick={newChat}
-            disabled={streaming}
-          >
-            <Plus className="h-4 w-4" /> New chat
-          </Button>
-
+        <nav className="space-y-1.5">
           <button
             type="button"
-            onClick={() => setOpenItem({ type: "knowledge" })}
+            disabled={streaming}
+            onClick={() => {
+              newChat();
+              setOpenItem(null);
+              setSurface("chat");
+            }}
             className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-              openItem?.type === "knowledge"
-                ? "bg-secondary font-medium"
-                : "text-muted-foreground hover:bg-accent/60"
+              "flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition-colors",
+              surface === "chat" && messages.length === 0
+                ? "bg-white shadow-sm"
+                : "text-muted-foreground hover:bg-white/70 hover:text-foreground"
             )}
           >
-            <BookOpen className="h-4 w-4 shrink-0" /> Knowledge base
+            <SquarePen className="h-5 w-5" />
+            New Task
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpenItem(null);
+              setSurface("tasks");
+            }}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition-colors",
+              surface === "tasks"
+                ? "bg-white shadow-sm"
+                : "text-muted-foreground hover:bg-white/70 hover:text-foreground"
+            )}
+          >
+            <Columns3 className="h-5 w-5" />
+            Tasks
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              refreshWorkflows();
+              setOpenItem(null);
+              setSurface("recurring");
+            }}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition-colors",
+              surface === "recurring"
+                ? "bg-white shadow-sm"
+                : "text-muted-foreground hover:bg-white/70 hover:text-foreground"
+            )}
+          >
+            <Repeat2 className="h-5 w-5" />
+            Recurring
+          </button>
+          <button
+            type="button"
+            onClick={() => openAgentPort(PORTS.files)}
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-white/70 hover:text-foreground"
+          >
+            <Folder className="h-5 w-5" />
+            Files
+          </button>
+        </nav>
 
-          <div className="space-y-0.5">
-            <div className="flex items-center justify-between px-2 pb-0.5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Workflows
-              </p>
-              <div className="flex items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={refreshWorkflows}
-                  className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  aria-label="Refresh workflows"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOpenItem({ type: "builder", id: null })}
-                  className={cn(
-                    "rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground",
-                    openItem?.type === "builder" && openItem.id === null && "bg-accent text-foreground"
-                  )}
-                  aria-label="New workflow"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-              </div>
+        <p className="mb-2 mt-8 px-4 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+          Advanced
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setSurface("chat");
+            setOpenItem({ type: "knowledge" });
+          }}
+          className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-white/70 hover:text-foreground"
+        >
+          <Sparkles className="h-5 w-5" />
+          Skills
+        </button>
+
+        <Link
+          href="/dashboard/settings"
+          className="mt-auto flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/70 hover:text-foreground"
+        >
+          <Settings2 className="h-5 w-5" />
+          Settings
+        </Link>
+      </aside>
+
+      {/* CENTER — tasks board, recurring work, or a conversation */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden border bg-white px-4 shadow-sm md:rounded-2xl">
+        {surface === "tasks" ? (
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="border-b px-2 py-4">
+              <h1 className="text-sm font-semibold">Tasks</h1>
             </div>
-            <div className="max-h-44 space-y-0.5 overflow-y-auto">
+            <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-3">
+              <section className="border-r px-4 py-7">
+                <div className="mb-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span className="h-3 w-3 rounded-full border-[3px] border-amber-400" />
+                  In progress
+                  <span className="font-normal">0</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    newChat();
+                    setSurface("chat");
+                  }}
+                  className="flex w-full items-center justify-center rounded-xl border border-dashed py-4 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                  aria-label="Create a new task"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </section>
+              <section className="border-r px-4 py-7">
+                <div className="mb-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span className="h-3 w-3 rounded-full border-[3px] border-violet-500" />
+                  Ready for review
+                  <span className="font-normal">{sessions.length}</span>
+                </div>
+                <div className="space-y-3">
+                  {sessions.length === 0 ? (
+                    <p className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">
+                      Your agent&apos;s tasks will appear here.
+                    </p>
+                  ) : (
+                    sessions.map((s, index) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={streaming}
+                        onClick={() => {
+                          loadSession(s.id);
+                          setSurface("chat");
+                        }}
+                        style={{ animationDelay: `${index * 40}ms` }}
+                        className="block w-full animate-fade-up rounded-xl border bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-ring hover:shadow-md disabled:opacity-60"
+                      >
+                        <span className="block truncate text-sm font-semibold">
+                          {s.title || "Untitled task"}
+                        </span>
+                        <span className="mt-1 block truncate text-xs text-muted-foreground">
+                          {s.preview || "Open to review the agent's work"}
+                        </span>
+                        <span className="mt-3 block text-[11px] text-muted-foreground">
+                          {fmtWhen(s.last_active || s.started_at)}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </section>
+              <section className="px-4 py-7">
+                <div className="mb-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  Complete
+                  <span className="font-normal">0</span>
+                </div>
+              </section>
+            </div>
+          </div>
+        ) : surface === "recurring" ? (
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex items-center justify-between border-b px-2 py-4">
+              <div>
+                <h1 className="text-sm font-semibold">Recurring</h1>
+                <p className="text-xs text-muted-foreground">Scheduled and event-driven workflows</p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setOpenItem({ type: "builder", id: null });
+                  setSurface("chat");
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                New workflow
+              </Button>
+            </div>
+            <div className="grid flex-1 content-start gap-3 overflow-y-auto p-6 sm:grid-cols-2 lg:grid-cols-3">
               {workflows === null ? (
-                <p className="px-2 py-1 text-xs text-muted-foreground">Loading…</p>
+                <p className="text-sm text-muted-foreground">Loading…</p>
               ) : workflows.length === 0 ? (
-                <p className="px-2 py-1 text-xs text-muted-foreground">No workflows</p>
+                <div className="col-span-full rounded-2xl border border-dashed p-12 text-center">
+                  <Repeat2 className="mx-auto h-7 w-7 text-muted-foreground/50" />
+                  <p className="mt-3 text-sm font-medium">No recurring workflows yet</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Create one to let your agent work on a schedule.</p>
+                </div>
               ) : (
-                workflows.map((w, idx) => (
+                workflows.map((w) => (
                   <button
                     key={w.id}
                     type="button"
-                    onClick={() => setOpenItem({ type: "workflow", id: w.id })}
-                    style={{ animationDelay: `${idx * 40}ms` }}
-                    className={cn(
-                      "flex w-full animate-fade-up items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                      openItem?.type === "workflow" && openItem.id === w.id
-                        ? "bg-secondary font-medium"
-                        : "text-muted-foreground hover:bg-accent/60",
-                      w.id === highlightWorkflowId && "animate-highlight"
-                    )}
+                    onClick={() => {
+                      setOpenItem({ type: "workflow", id: w.id });
+                      setSurface("chat");
+                    }}
+                    className="rounded-2xl border bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-ring hover:shadow-md"
                   >
-                    <Zap className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{w.name}</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="truncate text-sm font-semibold">{w.name}</span>
+                      <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", w.enabled ? "bg-emerald-500" : "bg-muted-foreground/30")} />
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                      {w.instructions}
+                    </p>
+                    <p className="mt-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {w.trigger_type === "schedule" ? w.cadence || "scheduled" : w.trigger_type}
+                    </p>
                   </button>
                 ))
               )}
             </div>
           </div>
-        </div>
-
-        {/* Scrollable: chats fill the rest */}
-        <div className="flex-1 overflow-y-auto p-2">
-          <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Chats
-          </p>
-          {sessions.length === 0 ? (
-            <p className="px-2 py-1 text-xs text-muted-foreground">No chats yet</p>
-          ) : (
-            sessions.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                disabled={streaming}
-                onClick={() => loadSession(s.id)}
-                className={cn(
-                  "block w-full truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                  s.id === activeSession
-                    ? "bg-secondary font-medium"
-                    : "text-muted-foreground hover:bg-accent/60",
-                  streaming && "cursor-not-allowed opacity-60"
-                )}
-              >
-                {s.title || s.preview || "Untitled chat"}
-              </button>
-            ))
-          )}
-        </div>
-      </aside>
-
-      {/* CENTER — conversation */}
-      <div className="flex min-w-0 flex-1 flex-col px-4">
+        ) : (
+          <>
         <div className="flex items-center justify-between border-b py-3">
           <div>
-            <h1 className="font-semibold leading-tight">{agentName}</h1>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <button type="button" onClick={() => setSurface("tasks")} className="hover:text-foreground">
+                Tasks
+              </button>
+              <span>/</span>
+              <span className="text-foreground">{messages.length === 0 ? "New Task" : agentName}</span>
+            </div>
             <p className="text-xs text-muted-foreground">
               {loading ? "Loading…" : running ? "Online" : agent?.status ?? "unknown"}
             </p>
@@ -872,12 +1003,10 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
         <div ref={scrollRef} onScroll={onMessagesScroll} className="flex-1 space-y-4 overflow-y-auto py-6">
           {messages.length === 0 && !loading && (
             <div className="flex h-full items-center justify-center">
-              <div className="w-full max-w-md animate-pop text-center">
-                <MessageSquare className="mx-auto h-8 w-8 text-muted-foreground/40" />
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Ask {agentName} anything — it can browse, write, code, and work with files.
-                  Your chats, workflows, and knowledge are in the sidebar; open any of them to
-                  see it here alongside the chat.
+              <div className="w-full max-w-3xl animate-pop text-center">
+                <h1 className="text-2xl font-semibold tracking-tight">What do you need done?</h1>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Describe the outcome. {agentName} can browse, write, code, and work with your files.
                 </p>
 
                 <button
@@ -953,7 +1082,10 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
         </div>
 
         <form
-          className="flex flex-col gap-2 border-t pt-4"
+          className={cn(
+            "flex flex-col gap-2 border-t pb-4 pt-4",
+            messages.length === 0 && "mx-auto w-full max-w-3xl"
+          )}
           onSubmit={(e) => {
             e.preventDefault();
             send();
@@ -1031,6 +1163,8 @@ export function ChatView({ agentId, standalone }: { agentId: string; standalone?
             </Button>
           </div>
         </form>
+          </>
+        )}
       </div>
 
       {/* RIGHT PANEL — the opened item (a workflow map or the knowledge base) */}
