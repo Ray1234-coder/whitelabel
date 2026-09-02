@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Plus } from "lucide-react";
+import { Check, Link2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { AGENT_TYPES, SHAPE_PRESETS, monthlyComputeUsd } from "@/config/agents";
@@ -19,6 +19,7 @@ import {
 
 const DEFAULT_TEMPLATE =
   AGENT_TYPES.find((a) => a.recommended)?.template ?? AGENT_TYPES[0].template;
+type AddMode = "create" | "import";
 
 export function CreateAgentButton({
   workspaceId,
@@ -29,9 +30,11 @@ export function CreateAgentButton({
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<AddMode>("create");
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   const [shapeId, setShapeId] = useState(SHAPE_PRESETS[0].id);
   const [cap, setCap] = useState("5");
+  const [existingAgent, setExistingAgent] = useState("");
 
   const shape = SHAPE_PRESETS.find((s) => s.id === shapeId) ?? SHAPE_PRESETS[0];
   const computeCost = monthlyComputeUsd(shape.cpu, shape.memory, shape.disk);
@@ -59,20 +62,80 @@ export function CreateAgentButton({
     }
   }
 
+  async function importExisting() {
+    setBusy(true);
+    try {
+      await apiFetch("/api/agents/import", {
+        method: "POST",
+        body: JSON.stringify({ workspace_id: workspaceId, agent: existingAgent }),
+      });
+      toast.success("Existing agent attached");
+      setExistingAgent("");
+      setOpen(false);
+      onCreated();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" />
-        Create agent
+        Add agent
       </Button>
 
       <Dialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Create agent</DialogTitle>
+            <DialogTitle>Add agent</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="How to add an agent">
+              <Button
+                type="button"
+                variant={mode === "create" ? "default" : "outline"}
+                onClick={() => setMode("create")}
+                disabled={busy}
+              >
+                <Plus className="h-4 w-4" />
+                Create new
+              </Button>
+              <Button
+                type="button"
+                variant={mode === "import" ? "default" : "outline"}
+                onClick={() => setMode("import")}
+                disabled={busy}
+              >
+                <Link2 className="h-4 w-4" />
+                Import existing
+              </Button>
+            </div>
+
+            {mode === "import" ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="existing-agent">Agent37 instance ID or URL</Label>
+                  <Input
+                    id="existing-agent"
+                    value={existingAgent}
+                    onChange={(e) => setExistingAgent(e.target.value)}
+                    placeholder="ab12cd34ef"
+                    autoComplete="off"
+                    disabled={busy}
+                  />
+                </div>
+                <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+                  The instance must belong to the same Agent37 workspace used by Workify. Importing
+                  keeps its files, memory, sessions, model, and budget. Removing it later only
+                  detaches it from Workify; the Agent37 instance is not deleted.
+                </div>
+              </div>
+            ) : (
+              <>
             {/* Agent type */}
             <div className="space-y-2">
               <p className="text-sm font-medium">Agent type</p>
@@ -195,14 +258,25 @@ export function CreateAgentButton({
                 cut the cost.
               </p>
             </div>
+              </>
+            )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
               Cancel
             </Button>
-            <Button onClick={create} disabled={busy}>
-              {busy ? "Creating..." : "Create agent"}
+            <Button
+              onClick={mode === "create" ? create : importExisting}
+              disabled={busy || (mode === "import" && !existingAgent.trim())}
+            >
+              {busy
+                ? mode === "create"
+                  ? "Creating..."
+                  : "Importing..."
+                : mode === "create"
+                  ? "Create agent"
+                  : "Import agent"}
             </Button>
           </DialogFooter>
         </DialogContent>

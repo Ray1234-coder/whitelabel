@@ -85,7 +85,7 @@ export function AgentActionsMenu({
 
   async function remove() {
     await apiFetch(`/api/agents/${agent.agent37_id}`, { method: "DELETE" });
-    toast.success("Agent deleted");
+    toast.success(agent.plan === "external" ? "Agent detached" : "Agent deleted");
     onChanged();
   }
 
@@ -254,7 +254,7 @@ export function AgentActionsMenu({
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>
                 <Trash2 />
-                Delete agent
+                {agent.plan === "external" ? "Detach from Workify" : "Delete agent"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -266,10 +266,14 @@ export function AgentActionsMenu({
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
-        title="Delete agent?"
-        description="This permanently deletes the agent and its data. This cannot be undone."
-        confirmText="Delete"
-        destructive
+        title={agent.plan === "external" ? "Detach agent?" : "Delete agent?"}
+        description={
+          agent.plan === "external"
+            ? "This removes the agent from Workify. The Agent37 instance and all of its data stay intact."
+            : "This permanently deletes the agent and its data. This cannot be undone."
+        }
+        confirmText={agent.plan === "external" ? "Detach" : "Delete"}
+        destructive={agent.plan !== "external"}
         onConfirm={remove}
       />
     </>

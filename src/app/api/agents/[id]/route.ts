@@ -43,10 +43,12 @@ export async function DELETE(_request: Request, { params }: Ctx) {
     const row = await getAgentRow(supabase, id);
     await requireAdmin(supabase, row.workspace_id, user.id);
 
-    await agent37.deleteAgent(id);
+    if (row.plan !== "external") {
+      await agent37.deleteAgent(id);
+    }
     await supabase.from("agents").delete().eq("agent37_id", id);
 
-    return json({ id, deleted: true });
+    return json({ id, deleted: true, detached: row.plan === "external" });
   } catch (e) {
     return handleError(e);
   }

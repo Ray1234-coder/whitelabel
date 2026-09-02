@@ -108,6 +108,7 @@ export function AgentsView() {
                     <div className="flex items-center gap-2">
                       <span>{a.template ?? "-"}</span>
                       {a.plan === "free" && <Badge variant="secondary">Free trial</Badge>}
+                      {a.plan === "external" && <Badge variant="secondary">Imported</Badge>}
                     </div>
                     <div className="text-xs">{a.model || "Default model"}</div>
                   </td>

@@ -39,8 +39,12 @@ export async function DELETE(_request: Request, { params }: Ctx) {
     if (ws.owner_id !== user.id) throw new ApiError(403, "forbidden", "Only the owner can delete a workspace");
 
     // Tear down the workspace's Agent37 agents first so none are orphaned.
-    const { data: rows } = await supabase.from("agents").select("agent37_id").eq("workspace_id", id);
+    const { data: rows } = await supabase
+      .from("agents")
+      .select("agent37_id, plan")
+      .eq("workspace_id", id);
     for (const row of rows ?? []) {
+      if (row.plan === "external") continue;
       try {
         await agent37.deleteAgent(row.agent37_id as string);
       } catch {
