@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { branding } from "@/config/branding";
-import { CountUp } from "@/components/landing/CountUp";
 import { LeadForm } from "@/components/landing/LeadForm";
 import { Reveal } from "@/components/landing/Reveal";
 import { RecoveryForward } from "@/components/RecoveryForward";
@@ -264,37 +263,6 @@ export default async function Home() {
                     </li>
                   ))}
                 </ul>
-              </Reveal>
-            </div>
-          </div>
-        </section>
-
-        {/* Stats */}
-        <section className="border-t border-zinc-100 px-6 py-28">
-          <div className="mx-auto max-w-6xl text-center">
-            <Reveal>
-              <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
-                Numbers from teams already running on {branding.appName}
-              </h2>
-            </Reveal>
-            <div className="mt-14 grid gap-12 sm:grid-cols-3">
-              <Reveal className="reveal-scale">
-                <p className="gradient-text text-6xl font-semibold tracking-tight">
-                  <CountUp value={31} suffix=" hrs" />
-                </p>
-                <p className="mt-3 text-sm text-zinc-600">saved per employee, every month</p>
-              </Reveal>
-              <Reveal delay={140} className="reveal-scale">
-                <p className="gradient-text text-6xl font-semibold tracking-tight">
-                  <CountUp value={87} suffix="%" />
-                </p>
-                <p className="mt-3 text-sm text-zinc-600">of routine workflows fully automated</p>
-              </Reveal>
-              <Reveal delay={280} className="reveal-scale">
-                <p className="gradient-text text-6xl font-semibold tracking-tight">
-                  <CountUp value={4} suffix=" min" />
-                </p>
-                <p className="mt-3 text-sm text-zinc-600">median time from request to done</p>
               </Reveal>
             </div>
           </div>
