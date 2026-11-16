@@ -9,7 +9,6 @@ import {
   Inbox,
   MessageSquare,
   Minus,
-  ShieldCheck,
   UserCheck,
   Workflow,
 } from "lucide-react";
@@ -144,7 +143,6 @@ export default async function Home() {
             <a href="#how-it-works" className="hover:text-zinc-950">How it works</a>
             <a href="#agents" className="hover:text-zinc-950">Agents</a>
             <a href="#customers" className="hover:text-zinc-950">Customers</a>
-            <a href="#security" className="hover:text-zinc-950">Security</a>
           </nav>
           <div className="flex items-center gap-3">
             <Link
@@ -302,34 +300,6 @@ export default async function Home() {
           </div>
         </section>
 
-        {/* Security strip */}
-        <section id="security" className="border-t border-zinc-100 px-6 py-20">
-          <div className="mx-auto max-w-6xl text-center">
-            <Reveal>
-              <h2 className="text-2xl font-semibold tracking-tight">
-                Enterprise-grade security, provable on request.
-              </h2>
-              <p className="mx-auto mt-3 max-w-xl text-sm text-zinc-600">
-                Any platform touching your operations should prove it&apos;s safe — not just say so.{" "}
-                {branding.appName} does.
-              </p>
-            </Reveal>
-            <Reveal delay={120} className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              {["SOC 2 Type II", "GDPR", "ISO 27001", "SSO / SAML", "Data residency options"].map(
-                (badge) => (
-                  <span
-                    key={badge}
-                    className="flex items-center gap-1.5 rounded-full border border-zinc-200 px-4 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50/50"
-                  >
-                    <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
-                    {badge}
-                  </span>
-                )
-              )}
-            </Reveal>
-          </div>
-        </section>
-
         {/* Capabilities */}
         <section id="agents" className="border-t border-zinc-100 px-6 py-28">
           <div className="mx-auto max-w-6xl">
@@ -480,7 +450,6 @@ export default async function Home() {
               <li><a href="#product" className="hover:text-zinc-900">Product</a></li>
               <li><a href="#how-it-works" className="hover:text-zinc-900">How it works</a></li>
               <li><a href="#agents" className="hover:text-zinc-900">Agents</a></li>
-              <li><a href="#security" className="hover:text-zinc-900">Security</a></li>
               <li><Link href="/login" className="hover:text-zinc-900">Log in</Link></li>
             </ul>
           </div>
